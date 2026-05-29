@@ -12,11 +12,15 @@ struct Matrix{
 
     Matrix multiply(const Matrix&) const;
 
+    Matrix hadamard(const Matrix&) const;
+
     Matrix transpose() const;
 
     void add(const Matrix&);
 
     static Matrix init_rand_mat(int, int, std::mt19937&, float, float);
+
+    static Matrix init_he(int, int, std::mt19937&);
 
     static Matrix load_image_mat(const Dataset&, int, int);
 

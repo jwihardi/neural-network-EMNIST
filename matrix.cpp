@@ -23,6 +23,20 @@ Matrix Matrix::multiply(const Matrix& other) const{
     return res;
 }
 
+Matrix Matrix::hadamard(const Matrix& other) const{
+    if(cols != other.cols || rows != other.rows) 
+        throw std::runtime_error("Invalid dimensions for hadamard multiplication");
+
+    Matrix res(rows, cols);
+
+    for(int i = 0; i < rows; i++){  
+        for(int u = 0; u < cols; u++){
+            res.data[i * cols + u] = data[i * cols + u] * other.data[i * cols + u]; 
+        }
+    }
+    return res;
+}
+
 Matrix Matrix::transpose() const{
     Matrix res(cols, rows);
 
@@ -42,6 +56,15 @@ void Matrix::add(const Matrix& other){
         for(int u = 0; u < cols; u++)
             data[i * cols + u] += other.data[i * cols + u];
     }
+}
+
+Matrix Matrix::init_he(int rows_, int cols_, std::mt19937& rand){
+    Matrix matrix(rows_, cols_);
+    float stddev = std::sqrt(2.0f / static_cast<float>(cols_));
+    std::normal_distribution<float> dist(0.0f, stddev);
+    for(std::size_t i = 0; i < matrix.data.size(); i++)
+        matrix.data[i] = dist(rand);
+    return matrix;
 }
 
 Matrix Matrix::init_rand_mat(int rows_, int cols_, std::mt19937& rand, float min_val, float max_val){
