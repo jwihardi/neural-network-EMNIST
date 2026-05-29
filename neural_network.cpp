@@ -37,6 +37,7 @@ int main(int argc, char *argv[]){
     Matrix W2 = Matrix::init_he(num_labels, hidden_size, rand);
     Matrix b2(num_labels, 1);
 
+    std::cout << "************\tTRAINING\t*************" << "\n";
     train(dataset, W1, b1, W2, b2, epochs, learning_rate);
 
     return 0;
