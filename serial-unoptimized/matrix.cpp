@@ -56,17 +56,6 @@ Matrix Matrix::hadamard(const Matrix& other) const{
     return res;
 }
 
-Matrix Matrix::transpose() const{
-    Matrix res(cols, rows);
-
-    for(int i = 0; i < rows; i++){
-        for(int u = 0; u < cols; u++){
-            res.data[u * res.cols + i] = data[i * cols + u];
-        }
-    }
-    return res;
-}
-
 void Matrix::add(const Matrix& other){
     if(rows != other.rows || cols != other.cols)
         throw std::runtime_error("Invalid dimensions for matrix addition");
@@ -83,17 +72,6 @@ Matrix Matrix::init_he(int rows_, int cols_, std::mt19937& rand){
     std::normal_distribution<float> dist(0.0f, stddev);
     for(std::size_t i = 0; i < matrix.data.size(); i++)
         matrix.data[i] = dist(rand);
-    return matrix;
-}
-
-Matrix Matrix::init_rand_mat(int rows_, int cols_, std::mt19937& rand, float min_val, float max_val){
-    Matrix matrix(rows_, cols_);
-
-    std::uniform_real_distribution<float> dist(min_val, max_val);
-
-    for(std::size_t i = 0; i < matrix.data.size(); i++)
-        matrix.data[i] = dist(rand);
-
     return matrix;
 }
 
@@ -126,11 +104,6 @@ int Matrix::argmax() const{
 
 void Matrix::subtract_one_hot(int label){
     data[label] -= 1.0f;
-}
-
-void Matrix::scale(float scale){
-    for(float& val : data)
-        val *= scale;
 }
 
 void Matrix::subtract_scaled(const Matrix& mat, float scale){

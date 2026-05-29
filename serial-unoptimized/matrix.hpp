@@ -18,11 +18,7 @@ struct Matrix{
 
     Matrix hadamard(const Matrix&) const;
 
-    Matrix transpose() const;
-
     void add(const Matrix&);
-
-    static Matrix init_rand_mat(int, int, std::mt19937&, float, float);
 
     static Matrix init_he(int, int, std::mt19937&);
 
@@ -31,8 +27,6 @@ struct Matrix{
     int argmax() const;
     
     void subtract_one_hot(int);
-
-    void scale(float);
 
     void subtract_scaled(const Matrix&, float);
 };
