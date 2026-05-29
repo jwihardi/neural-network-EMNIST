@@ -27,8 +27,6 @@ int main(int argc, char *argv[]){
     Dataset dataset = load_images(image_file_path, num_labels);
     load_labels(label_file_path, &dataset);
 
-    int batch_size = 1;
-
     std::mt19937 rand(0);
     
     int input_size = dataset.height * dataset.width;
