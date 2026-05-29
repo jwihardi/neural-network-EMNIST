@@ -1,9 +1,11 @@
 #include <iostream>
 #include <string>
+
 #include "data_loader.hpp"
 #include "matrix.hpp"
 #include "activations.hpp"
 #include "losses.hpp"
+#include "../shared.hpp"
 
 void train(const Dataset&, Matrix&, Matrix&, Matrix&, Matrix&, int, float);
 void evaluate(const Dataset&, const Matrix&, const Matrix&, const Matrix&, const Matrix&);
@@ -11,21 +13,19 @@ void evaluate(const Dataset&, const Matrix&, const Matrix&, const Matrix&, const
 int main(int argc, char *argv[]){
     std::cout << "Neural Network\n"; 
 
-    if(argc < 6){
+    if(argc < 4){
         std::cerr << "Usage: " << argv[0] 
-            << " <images_file> <labels_file> <epochs> <learning_rate> <hidden_layer>\n";
+            << " <epochs> <learning rate> <hidden size>\n";
         return 1;
     }
 
-    std::string image_file_path = argv[1];
-    std::string label_file_path = argv[2];
-    int epochs = std::stoi(argv[3]);
-    float learning_rate = std::stof(argv[4]);
-    int hidden_size = std::stoi(argv[5]);
+    int epochs = std::stoi(argv[1]);
+    float learning_rate = std::stof(argv[2]);
+    int hidden_size = std::stoi(argv[3]);
 
     int num_labels = 10;
-    Dataset dataset = load_images(image_file_path, num_labels);
-    load_labels(label_file_path, &dataset);
+    Dataset dataset = load_images(Shared::IMAGE_FILE_PATH, num_labels);
+    load_labels(Shared::LABEL_FILE_PATH, &dataset);
 
     std::mt19937 rand(0);
     
@@ -39,8 +39,8 @@ int main(int argc, char *argv[]){
     std::cout << "************\tTRAINING\t*************" << "\n";
     train(dataset, W1, b1, W2, b2, epochs, learning_rate);
    
-    Dataset test_set = load_images("mnist/t10k-images-idx3-ubyte", num_labels);
-    load_labels("mnist/t10k-labels-idx1-ubyte", &test_set);
+    Dataset test_set = load_images(Shared::TEST_IMAGE_FILE_PATH, num_labels);
+    load_labels(Shared::TEST_LABEL_FILE_PATH, &test_set);
 
     std::cout << "************\tEVALUATION\t*************\n";
     evaluate(test_set, W1, b1, W2, b2);
