@@ -23,6 +23,25 @@ Matrix Matrix::multiply(const Matrix& other) const{
     return res;
 }
 
+Matrix Matrix::transpose_multiply(const Matrix& other) const{
+    Matrix res(cols, 1);
+
+    for(int i = 0; i < cols; i++){
+        float curr_sum = 0.0f;
+        for(int u = 0; u < rows; u++)
+            curr_sum += data[u * cols + i] * other.data[u];
+        res.data[i] = curr_sum;
+    }
+    return res;
+}
+
+void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float scale){
+    for(int i = 0; i < rows; i++)
+        for(int u = 0; u < cols; u++){
+            data[i * cols + u] -= scale * col.data[i] * row.data[u];
+        }
+}
+
 Matrix Matrix::hadamard(const Matrix& other) const{
     if(cols != other.cols || rows != other.rows) 
         throw std::runtime_error("Invalid dimensions for hadamard multiplication");
@@ -115,7 +134,6 @@ void Matrix::scale(float scale){
 }
 
 void Matrix::subtract_scaled(const Matrix& mat, float scale){
-    Matrix tmp = mat;
-    tmp.scale(-scale);
-    add(tmp);
+    for(std::size_t i = 0; i < data.size(); i++)
+        data[i] -= scale * mat.data[i];
 }

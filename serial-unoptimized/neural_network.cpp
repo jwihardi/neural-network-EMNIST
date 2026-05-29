@@ -6,6 +6,7 @@
 #include "losses.hpp"
 
 void train(const Dataset&, Matrix&, Matrix&, Matrix&, Matrix&, int, float);
+void evaluate(const Dataset&, const Matrix&, const Matrix&, const Matrix&, const Matrix&);
 
 int main(int argc, char *argv[]){
     std::cout << "Neural Network\n"; 
@@ -39,6 +40,12 @@ int main(int argc, char *argv[]){
 
     std::cout << "************\tTRAINING\t*************" << "\n";
     train(dataset, W1, b1, W2, b2, epochs, learning_rate);
+   
+    Dataset test_set = load_images("mnist/t10k-images-idx3-ubyte", num_labels);
+    load_labels("mnist/t10k-labels-idx1-ubyte", &test_set);
+
+    std::cout << "************\tEVALUATION\t*************\n";
+    evaluate(test_set, W1, b1, W2, b2);
 
     return 0;
 }
@@ -70,16 +77,12 @@ void train(const Dataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Matrix& b
             /*      Backpropagation     */
             predictions.subtract_one_hot(actual);
 
-            Matrix dW2 = predictions.multiply(a1.transpose());
-
-            Matrix da1 = W2.transpose().multiply(predictions);
+            Matrix da1 = W2.transpose_multiply(predictions);
             Matrix dz1 = da1.hadamard(Activations::relu_derivative(z1));
 
-            Matrix dW1 = dz1.multiply(x.transpose());
-
-            W2.subtract_scaled(dW2, learning_rate);
+            W2.subtract_outer_product(predictions, a1, learning_rate);
+            W1.subtract_outer_product(dz1, x, learning_rate);
             b2.subtract_scaled(predictions, learning_rate);
-            W1.subtract_scaled(dW1, learning_rate);
             b1.subtract_scaled(dz1, learning_rate);
         }
         float avg_loss = tot_loss / static_cast<float>(dataset.num_samples);
@@ -88,3 +91,27 @@ void train(const Dataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Matrix& b
     }
 }
 
+void evaluate(const Dataset& dataset, const Matrix& W1, const Matrix& b1, const Matrix& W2, const Matrix& b2){
+    float tot_loss = 0.0f;
+    int correct = 0;
+
+    for(unsigned int sample = 0; sample < dataset.num_samples; sample++){
+        Matrix x = Matrix::load_image_mat(dataset, sample, 1);
+
+        Matrix z1 = W1.multiply(x);
+        z1.add(b1);
+        Matrix a1 = Activations::relu(z1);
+
+        Matrix z2 = W2.multiply(a1);
+        z2.add(b2);
+
+        Matrix predictions = Activations::softmax(z2);
+
+        int actual = dataset.labels[sample];
+        if(predictions.argmax() == actual) ++correct;
+        tot_loss += Losses::cross_entropy(predictions, actual);
+    }
+    float avg_loss = tot_loss / static_cast<float>(dataset.num_samples);
+    float accuracy = static_cast<float>(correct) / static_cast<float>(dataset.num_samples);
+    std::cout << "test loss: " << avg_loss << " | test accuracy: " << accuracy << "\n";
+}

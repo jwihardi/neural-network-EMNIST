@@ -12,6 +12,10 @@ struct Matrix{
 
     Matrix multiply(const Matrix&) const;
 
+    Matrix transpose_multiply(const Matrix&) const;
+
+    void subtract_outer_product(const Matrix&, const Matrix&, float);
+
     Matrix hadamard(const Matrix&) const;
 
     Matrix transpose() const;
