@@ -33,3 +33,8 @@ add_nn_target(unoptimized-serial-nn
     serial-unoptimized/neural_network.cpp
     serial-unoptimized/matrix.cpp
 )
+
+add_nn_target(optimized-serial-nn
+    serial-optimized/neural_network.cpp
+    serial-optimized/matrix.cpp
+)

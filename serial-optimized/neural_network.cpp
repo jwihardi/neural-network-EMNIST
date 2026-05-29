@@ -49,34 +49,46 @@ int main(int argc, char *argv[]){
 }
 
 void train(const Dataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Matrix& b2, int epochs, float learning_rate){
+    int input_size = dataset.height * dataset.width;
+    int hidden_size = W1.rows;
+    int num_labels = W2.rows;
+
+    Matrix x(input_size, 1);
+    Matrix z1(hidden_size, 1);
+    Matrix a1(hidden_size, 1);
+    Matrix z2(num_labels, 1);
+    Matrix predictions(num_labels, 1);
+    Matrix da1(hidden_size, 1);
+    Matrix relu_deriv(hidden_size, 1);
+    Matrix dz1(hidden_size, 1);
+
     for(int epoch = 0; epoch < epochs; epoch++){
         float tot_loss = 0.0f;
         int correct = 0;
 
         for(unsigned int sample = 0; sample < dataset.num_samples; sample++){
-            Matrix x = Matrix::load_image_mat(dataset, sample, 1); // batch size 1 for now
+            Matrix::load_image_into(dataset, sample, 1, x);
             
             /*      Forward     */
-            Matrix z1 = W1.multiply(x);
+            W1.multiply_into(x, z1);
             z1.add(b1);
-            Matrix a1 = Activations::relu(z1);
+            Activations::relu_into(z1, a1);
 
-            Matrix z2 = W2.multiply(a1);
+            W2.multiply_into(a1, z2);
             z2.add(b2);
 
-            Matrix predictions = Activations::softmax(z2);
+            Activations::softmax_into(z2, predictions);
 
             int actual = dataset.labels[sample];
-            int prediction = predictions.argmax();
-
-            if(prediction == actual) correct++;
+            if(predictions.argmax() == actual) correct++;
             tot_loss += Losses::cross_entropy(predictions, actual);
 
             /*      Backpropagation     */
             predictions.subtract_one_hot(actual);
 
-            Matrix da1 = W2.transpose_multiply(predictions);
-            Matrix dz1 = da1.hadamard(Activations::relu_derivative(z1));
+            W2.transpose_multiply_into(predictions, da1);
+            Activations::relu_derivative_into(z1, relu_deriv);
+            da1.hadamard_into(relu_deriv, dz1);
 
             W2.subtract_outer_product(predictions, a1, learning_rate);
             W1.subtract_outer_product(dz1, x, learning_rate);
@@ -90,20 +102,30 @@ void train(const Dataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Matrix& b
 }
 
 void evaluate(const Dataset& dataset, const Matrix& W1, const Matrix& b1, const Matrix& W2, const Matrix& b2){
+    int input_size = dataset.height * dataset.width;
+    int hidden_size = W1.rows;
+    int num_labels = W2.rows;
+
+    Matrix x(input_size, 1);
+    Matrix z1(hidden_size, 1);
+    Matrix a1(hidden_size, 1);
+    Matrix z2(num_labels, 1);
+    Matrix predictions(num_labels, 1);
+
     float tot_loss = 0.0f;
     int correct = 0;
 
     for(unsigned int sample = 0; sample < dataset.num_samples; sample++){
-        Matrix x = Matrix::load_image_mat(dataset, sample, 1);
+        Matrix::load_image_into(dataset, sample, 1, x);
 
-        Matrix z1 = W1.multiply(x);
+        W1.multiply_into(x, z1);
         z1.add(b1);
-        Matrix a1 = Activations::relu(z1);
+        Activations::relu_into(z1, a1);
 
-        Matrix z2 = W2.multiply(a1);
+        W2.multiply_into(a1, z2);
         z2.add(b2);
 
-        Matrix predictions = Activations::softmax(z2);
+        Activations::softmax_into(z2, predictions);
 
         int actual = dataset.labels[sample];
         if(predictions.argmax() == actual) ++correct;

@@ -10,19 +10,19 @@ struct Matrix{
 
     Matrix(int, int);
 
-    Matrix multiply(const Matrix&) const;
+    void multiply_into(const Matrix&, Matrix&) const;
 
-    Matrix transpose_multiply(const Matrix&) const;
+    void transpose_multiply_into(const Matrix&, Matrix&) const;
+
+    void hadamard_into(const Matrix&, Matrix&) const;
+    
+    static void load_image_into(const Dataset&, int, int, Matrix&);
 
     void subtract_outer_product(const Matrix&, const Matrix&, float);
-
-    Matrix hadamard(const Matrix&) const;
 
     void add(const Matrix&);
 
     static Matrix init_he(int, int, std::mt19937&);
-
-    static Matrix load_image_mat(const Dataset&, int, int);
 
     int argmax() const;
     
