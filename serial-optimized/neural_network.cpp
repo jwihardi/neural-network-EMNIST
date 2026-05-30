@@ -32,7 +32,7 @@ int main(int argc, char *argv[]){
     Dataset dataset = load_images(paths.train_images, num_labels);
     load_labels(paths.train_labels, &dataset);
 
-    std::mt19937 rand(0);
+    std::mt19937 rand(Shared::SEED);
     
     int input_size = dataset.height * dataset.width;
 

@@ -53,4 +53,6 @@ struct Shared {
         }
         throw std::runtime_error("Shared: Invalid dataset name");
     }
+
+    inline static const int SEED = 0;
 };
