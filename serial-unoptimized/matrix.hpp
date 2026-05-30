@@ -10,24 +10,17 @@ struct Matrix{
     int rows, cols;
 
     Matrix(int, int);
+    static Matrix load_image_mat(const Dataset&, int, int);
+    static Matrix init_he(int, int, std::mt19937&);
 
     Matrix multiply(const Matrix&) const;
-
     Matrix transpose_multiply(const Matrix&) const;
-
-    void subtract_outer_product(const Matrix&, const Matrix&, float);
-
     Matrix hadamard(const Matrix&) const;
 
     void add(const Matrix&);
-
-    static Matrix init_he(int, int, std::mt19937&);
-
-    static Matrix load_image_mat(const Dataset&, int, int);
-
-    int argmax() const;
-    
+    void subtract_scaled(const Matrix&, float);
+    void subtract_outer_product(const Matrix&, const Matrix&, float);
     void subtract_one_hot(int);
 
-    void subtract_scaled(const Matrix&, float);
+    int argmax() const;
 };
