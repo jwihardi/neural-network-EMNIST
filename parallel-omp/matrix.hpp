@@ -4,7 +4,7 @@
 #include <random>
 #include <cstdint>
 
-#include "data_loader.hpp"
+struct Dataset;
 
 struct Matrix{
     std::vector<float> data;

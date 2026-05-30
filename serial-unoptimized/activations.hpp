@@ -1,5 +1,8 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
+
 #include "matrix.hpp"
 
 struct Activations{

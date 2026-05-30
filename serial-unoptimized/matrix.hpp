@@ -2,7 +2,8 @@
 
 #include <vector>
 #include <random>
-#include "data_loader.hpp"
+
+struct Dataset;
 
 struct Matrix{
     std::vector<float> data;
