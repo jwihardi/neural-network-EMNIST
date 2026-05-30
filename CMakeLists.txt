@@ -5,6 +5,9 @@ project(neural_network LANGUAGES CXX)
 # Put built executables in the project root, not inside build/
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# OpenMP for the parallel-omp target (adds -fopenmp to compile + link)
+find_package(OpenMP REQUIRED)
+
 # Shared flags applied to every target via add_nn_target() below
 set(NN_COMPILE_OPTIONS
     -Wall
@@ -41,3 +44,10 @@ add_nn_target(optimized-serial-nn
     serial-optimized/neural_network.cpp
     serial-optimized/matrix.cpp
 )
+
+# Same code + flags as optimized-serial, plus OpenMP parallelism.
+add_nn_target(parallel-omp-nn
+    parallel-omp/neural_network.cpp
+    parallel-omp/matrix.cpp
+)
+target_link_libraries(parallel-omp-nn PRIVATE OpenMP::OpenMP_CXX)
