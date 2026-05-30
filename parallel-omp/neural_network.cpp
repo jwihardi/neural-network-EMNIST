@@ -15,21 +15,24 @@ int main(int argc, char *argv[]){
     std::cout << "Neural Network\n"; 
     std::cout << "THEAD COUNT: " << omp_get_max_threads() << "\n";
 
-    if(argc < 6){
+    if(argc < 7){
         std::cerr << "Usage: " << argv[0] 
-            << " <epochs> <learning rate> <hidden size> <training_batch_size> <eval_batch_size>\n";
+            << " <emnist/mnist> <epochs> <learning rate> <hidden size> <training_batch_size> <eval_batch_size>\n";
         return 1;
     }
+    
+    std::string dataset_name = argv[1];
+    int epochs = std::stoi(argv[2]);
+    float learning_rate = std::stof(argv[3]);
+    int hidden_size = std::stoi(argv[4]);
+    int training_batch_size = std::stoi(argv[5]);
+    int eval_batch_size = std::stoi(argv[6]);
+    
+    DatasetPaths paths = Shared::dataset(dataset_name);
+    int num_labels = paths.num_classes;
 
-    int epochs = std::stoi(argv[1]);
-    float learning_rate = std::stof(argv[2]);
-    int hidden_size = std::stoi(argv[3]);
-    int training_batch_size = std::stoi(argv[4]);
-    int eval_batch_size = std::stoi(argv[5]);
-
-    int num_labels = 10;
-    Dataset dataset = load_images(Shared::IMAGE_FILE_PATH, num_labels);
-    load_labels(Shared::LABEL_FILE_PATH, &dataset);
+    Dataset dataset = load_images(paths.train_images, num_labels);
+    load_labels(paths.train_labels, &dataset);
 
     std::mt19937 rand(0);
     
@@ -43,8 +46,8 @@ int main(int argc, char *argv[]){
     std::cout << "************\tTRAINING\t*************" << "\n";
     train(dataset, W1, b1, W2, b2, epochs, learning_rate, training_batch_size);
    
-    Dataset test_set = load_images(Shared::TEST_IMAGE_FILE_PATH, num_labels);
-    load_labels(Shared::TEST_LABEL_FILE_PATH, &test_set);
+    Dataset test_set = load_images(paths.test_images, num_labels);
+    load_labels(paths.test_labels, &test_set);
 
     std::cout << "************\tEVALUATION\t*************\n";
     evaluate(test_set, W1, b1, W2, b2, eval_batch_size);

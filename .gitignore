@@ -7,6 +7,7 @@ CMakeFiles/
 Makefile
 CMakeCache.txt
 cmake_install.cmake
+__pycache__
 
 unoptimized-serial-nn
 optimized-serial-nn

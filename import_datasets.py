@@ -63,7 +63,7 @@ EMNIST_URL = "https://biometrics.nist.gov/cs_links/EMNIST/gzip.zip"
 #   "balanced" -> 47 classes
 #   "bymerge"  -> 47 classes
 #   "byclass"  -> 62 classes
-EMNIST_SPLIT = "digits"
+EMNIST_SPLIT = "byclass"
 
 emnist_dir = Path("emnist")
 emnist_dir.mkdir(exist_ok=True)
