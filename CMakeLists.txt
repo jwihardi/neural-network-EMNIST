@@ -16,9 +16,12 @@ set(NN_COMPILE_OPTIONS
     -Wdouble-promotion
     -Wformat=2
 
-    -O2
+    -O3                     # aggressive optimization (vectorization, unrolling)
     -pipe
-    -march=native
+    -march=native           # Zen 4: unlock AVX-512/FMA for this CPU
+    -funroll-loops          # unroll hot loops
+    -floop-unroll-and-jam   # reuse loaded data across unrolled outer iterations (the matmul win)
+    #    -ffast-math             # allow FP reassociation -> vectorized reduction loops (dot products)
 )
 
 # Helper: add_nn_target(<name> <sources...>)
@@ -32,4 +35,9 @@ endfunction()
 add_nn_target(unoptimized-serial-nn
     serial-unoptimized/neural_network.cpp
     serial-unoptimized/matrix.cpp
+)
+
+add_nn_target(optimized-serial-nn
+    serial-optimized/neural_network.cpp
+    serial-optimized/matrix.cpp
 )
