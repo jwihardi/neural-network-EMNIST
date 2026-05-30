@@ -54,10 +54,15 @@ void Matrix::hadamard_into(const Matrix& other, Matrix& out) const{
 }
 
 void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float scale){
-    for(int i = 0; i < rows; i++)
-        for(int u = 0; u < cols; u++){
-            data[i * cols + u] -= scale * col.data[i] * row.data[u];
-        }
+    /* r and d do not overlap anything else */
+    const float * __restrict r = row.data.data();
+    float * __restrict d = data.data();
+    for(int i = 0; i < rows; i++){
+        const float s = scale * col.data[i]; // computes the scalar once 
+        float * __restrict curr_row = d + i * cols;
+        for(int u = 0; u < cols; u++)
+            curr_row[u] -= s * r[u];
+    }
 }
 
 void Matrix::add(const Matrix& other){
