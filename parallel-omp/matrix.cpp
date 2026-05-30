@@ -39,7 +39,7 @@ void Matrix::transpose_multiply_into(const Matrix& other, Matrix& out) const{
     if(out.rows != cols || out.cols != other.cols || other.rows != rows)
         throw std::runtime_error("transpose_multiply_into: Invalid matrix dimensions");
     
-    #pragma omp for
+    #pragma omp for nowait
     for(int i = 0; i < cols; i++)
     for(int c = 0; c < other.cols; c++){
         float curr_sum = 0.0f;
@@ -78,7 +78,7 @@ void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float 
     const float * __restrict row_data = row.data.data();
     float * __restrict out_data = data.data();
 
-    #pragma omp for
+    #pragma omp for nowait
     for(int i = 0; i < rows; i++){
         const float * __restrict curr_col = col_data + i * batch_size;
         for(int u = 0; u < cols; u++){
@@ -140,7 +140,8 @@ void Matrix::subtract_one_hot(const std::vector<uint8_t>& labels, int start){
 
 void Matrix::subtract_scaled(const Matrix& mat, float scale){
     const int batch_size = mat.cols;
-    #pragma omp for
+
+    #pragma omp for nowait
     for(int i = 0; i < rows; i++){
         float curr_sum = 0.0f;
         for(int u = 0; u < batch_size; u++)

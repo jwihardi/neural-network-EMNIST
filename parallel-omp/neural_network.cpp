@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <omp.h>
 
 #include "data_loader.hpp"
 #include "matrix.hpp"
@@ -12,6 +13,7 @@ void evaluate(const Dataset&, const Matrix&, const Matrix&, const Matrix&, const
 
 int main(int argc, char *argv[]){
     std::cout << "Neural Network\n"; 
+    std::cout << "THEAD COUNT: " << omp_get_max_threads() << "\n";
 
     if(argc < 6){
         std::cerr << "Usage: " << argv[0] 
@@ -137,19 +139,22 @@ void evaluate(const Dataset& dataset, const Matrix& W1, const Matrix& b1, const 
     for(unsigned int batch = 0; batch < num_batches; batch++){
         int start = batch * batch_size;
         Matrix::load_image_into(dataset, start, batch_size, X);
-        
-        W1.multiply_into(X, Z1);
-        Z1.add(b1);
-        Activations::relu_into(Z1, A1);
-        
-        W2.multiply_into(A1, Z2);
-        Z2.add(b2);
-        Activations::softmax_into(Z2, predictions);
+        #pragma omp parallel
+        {
+            W1.multiply_into(X, Z1);
+            Z1.add(b1);
+            Activations::relu_into(Z1, A1);
 
-        for(int i = 0; i < batch_size; i++){
-            int actual = dataset.labels[start + i];
-            if(predictions.argmax(i) == actual) ++correct;
-            tot_loss += Losses::cross_entropy(predictions, i, actual);
+            W2.multiply_into(A1, Z2);
+            Z2.add(b2);
+            Activations::softmax_into(Z2, predictions);
+            
+            #pragma omp for reduction(+:correct, tot_loss)
+            for(int i = 0; i < batch_size; i++){
+                int actual = dataset.labels[start + i];
+                if(predictions.argmax(i) == actual) ++correct;
+                tot_loss += Losses::cross_entropy(predictions, i, actual);
+            }
         }
     }
     // safegaurd incase the assumed isn't true
