@@ -1,1 +1,1 @@
-MNIST serial for now
+
