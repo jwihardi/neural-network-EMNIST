@@ -1,6 +1,8 @@
 #include <stdexcept>
 #include <random>
 #include <cstddef>
+#include <omp.h>
+
 #include "matrix.hpp"
 #include "data_loader.hpp"
 
@@ -16,10 +18,14 @@ void Matrix::multiply_into(const Matrix& other, Matrix& out) const{
     const float * __restrict x = other.data.data();
     float * __restrict o = out.data.data();
 
-    for(int i = 0; i < rows * batch_size; i++) o[i] = 0.0f;
-    
+    #pragma omp for  
     for(int i = 0; i < rows; i++){
         float * __restrict out_row = o + i * batch_size;
+        
+        /* equivalent of the serial zero. Just zero curr batch once loaded in */
+        for(int b = 0; b < batch_size; b++)
+            out_row[b] = 0.0f;
+       
         for(int u = 0; u < cols; u++){
             const float w = data[i * cols + u];
             const float * __restrict x_row = x + u * batch_size;
@@ -32,7 +38,8 @@ void Matrix::multiply_into(const Matrix& other, Matrix& out) const{
 void Matrix::transpose_multiply_into(const Matrix& other, Matrix& out) const{
     if(out.rows != cols || out.cols != other.cols || other.rows != rows)
         throw std::runtime_error("transpose_multiply_into: Invalid matrix dimensions");
-
+    
+    #pragma omp for
     for(int i = 0; i < cols; i++)
     for(int c = 0; c < other.cols; c++){
         float curr_sum = 0.0f;
@@ -69,6 +76,7 @@ void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float 
     const float * __restrict row_data = row.data.data();
     float * __restrict out_data = data.data();
 
+    #pragma omp for
     for(int i = 0; i < rows; i++){
         const float * __restrict curr_col = col_data + i * batch_size;
         for(int u = 0; u < cols; u++){
