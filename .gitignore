@@ -12,3 +12,4 @@ __pycache__
 unoptimized-serial-nn
 optimized-serial-nn
 parallel-omp-nn
+parallel-cblas-nn

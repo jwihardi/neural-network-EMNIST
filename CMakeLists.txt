@@ -51,3 +51,27 @@ add_nn_target(parallel-omp-nn
     parallel-omp/matrix.cpp
 )
 target_link_libraries(parallel-omp-nn PRIVATE OpenMP::OpenMP_CXX)
+
+# Same code + flags as optimized-serial, with the hot GEMM/GER/AXPY ops
+# offloaded to an external CBLAS (OpenBLAS recommended; it is internally threaded).
+find_package(BLAS)
+if(BLAS_FOUND)
+    # FindBLAS provides the link target but not the cblas.h header location.
+    find_path(CBLAS_INCLUDE_DIR cblas.h PATH_SUFFIXES openblas)
+    if(NOT CBLAS_INCLUDE_DIR)
+        message(WARNING "BLAS library found but cblas.h was not; "
+                        "parallel-cblas-nn may fail to compile. "
+                        "Install the CBLAS headers (e.g. sci-libs/openblas).")
+    endif()
+    add_nn_target(parallel-cblas-nn
+        parallel-cblas/neural_network.cpp
+        parallel-cblas/matrix.cpp
+    )
+    target_link_libraries(parallel-cblas-nn PRIVATE BLAS::BLAS)
+    if(CBLAS_INCLUDE_DIR)
+        target_include_directories(parallel-cblas-nn PRIVATE ${CBLAS_INCLUDE_DIR})
+    endif()
+else()
+    message(WARNING "BLAS not found; skipping parallel-cblas-nn target. "
+                    "Install a CBLAS (e.g. 'emerge sci-libs/openblas') and re-run cmake.")
+endif()
