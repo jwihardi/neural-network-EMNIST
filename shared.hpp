@@ -44,10 +44,10 @@ struct Shared {
         }
         if(name == "byclass"){
             return {
-                "emnist-byclass-train-images-idx3-ubyte",
-                "emnist-byclass-train-labels-idx1-ubyte",
-                "emnist-byclass-test-images-idx3-ubyte",
-                "emnist-byclass-test-labels-idx1-ubyte",
+                "emnist/emnist-byclass-train-images-idx3-ubyte",
+                "emnist/emnist-byclass-train-labels-idx1-ubyte",
+                "emnist/emnist-byclass-test-images-idx3-ubyte",
+                "emnist/emnist-byclass-test-labels-idx1-ubyte",
                 62
             };
         }
