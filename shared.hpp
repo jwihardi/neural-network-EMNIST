@@ -8,24 +8,46 @@ struct DatasetPaths {
     int num_classes;
 
 };
+/*
+ *
+ *
+ *󰡯 emnist-byclass-test-images-idx3-ubyte   󰡯 emnist-digits-test-images-idx3-ubyte   󰡯 emnist-letters-test-images-idx3-ubyte
+󰡯 emnist-byclass-test-labels-idx1-ubyte   󰡯 emnist-digits-test-labels-idx1-ubyte   󰡯 emnist-letters-test-labels-idx1-ubyte
+󰡯 emnist-byclass-train-images-idx3-ubyte  󰡯 emnist-digits-train-images-idx3-ubyte  󰡯 emnist-letters-train-images-idx3-ubyte
+󰡯 emnist-byclass-train-labels-idx1-ubyte  󰡯 emnist-digits-train-labels-idx1-ubyte  󰡯 emnist-letters-train-labels-idx1-ubyte
+ *
+ *
+ *
+ *
+ *
+ * */
 
 struct Shared {
     static DatasetPaths dataset(const std::string& name){
-        if(name == "mnist"){
+        if(name == "digits"){
             return {
-                "mnist/train-images-idx3-ubyte",
-                "mnist/train-labels-idx1-ubyte",
-                "mnist/t10k-images-idx3-ubyte",
-                "mnist/t10k-labels-idx1-ubyte",
+                "emnist/emnist-digits-train-images-idx3-ubyte",
+                "emnist/emnist-digits-train-labels-idx1-ubyte",
+                "emnist/emnist-digits-test-images-idx3-ubyte",
+                "emnist/emnist-digits-test-labels-idx1-ubyte",
                 10
             };
         }
-        if(name == "emnist"){
+        if(name == "letters"){
             return {
-                "emnist/emnist-byclass-train-images-idx3-ubyte",
-                "emnist/emnist-byclass-train-labels-idx1-ubyte",
-                "emnist/emnist-byclass-test-images-idx3-ubyte",
-                "emnist/emnist-byclass-test-labels-idx1-ubyte",
+                "emnist/emnist-letters-train-images-idx3-ubyte",
+                "emnist/emnist-letters-train-labels-idx1-ubyte",
+                "emnist/emnist-letters-test-images-idx3-ubyte",
+                "emnist/emnist-letters-test-labels-idx1-ubyte",
+                27
+            };
+        }
+        if(name == "byclass"){
+            return {
+                "emnist-byclass-train-images-idx3-ubyte",
+                "emnist-byclass-train-labels-idx1-ubyte",
+                "emnist-byclass-test-images-idx3-ubyte",
+                "emnist-byclass-test-labels-idx1-ubyte",
                 62
             };
         }

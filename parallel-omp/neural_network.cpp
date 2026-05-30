@@ -17,7 +17,7 @@ int main(int argc, char *argv[]){
 
     if(argc < 7){
         std::cerr << "Usage: " << argv[0] 
-            << " <emnist/mnist> <epochs> <learning rate> <hidden size> <training_batch_size> <eval_batch_size>\n";
+            << " <digits/letters/byclass> <epochs> <learning rate> <hidden size> <training_batch_size> <eval_batch_size>\n";
         return 1;
     }
     

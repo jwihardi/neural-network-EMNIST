@@ -52,48 +52,48 @@ print("MNIST downloaded\n")
 # ---------------------------------------------------------------------------
 # EMNIST  (one big zip containing gzipped idx files for every split)
 # ---------------------------------------------------------------------------
-# EMNIST is distributed as a single ~500 MB zip from NIST. We download it once
-# and pull just the chosen split's four idx files into emnist/.
+# EMNIST is distributed as a single ~500 MB zip from NIST containing every
+# split. We download it once and extract each requested split into emnist/.
 EMNIST_URL = "https://biometrics.nist.gov/cs_links/EMNIST/gzip.zip"
 
-# Which split to extract. Class counts (set num_labels in the C++ accordingly):
-#   "digits"   -> 10 classes (drop-in with the current 10-class loader)
-#   "mnist"    -> 10 classes
-#   "letters"  -> 26 classes
-#   "balanced" -> 47 classes
-#   "bymerge"  -> 47 classes
-#   "byclass"  -> 62 classes
-EMNIST_SPLIT = "byclass"
+# Splits to extract. Class counts (set num_classes in shared.hpp to match):
+#   "digits"   -> 10   "mnist" -> 10
+#   "letters"  -> 26
+#   "balanced" -> 47   "bymerge" -> 47
+#   "byclass"  -> 62
+EMNIST_SPLITS = ["digits", "letters", "byclass"]
 
 emnist_dir = Path("emnist")
 emnist_dir.mkdir(exist_ok=True)
 
-emnist_files = [
-    f"emnist-{EMNIST_SPLIT}-train-images-idx3-ubyte",
-    f"emnist-{EMNIST_SPLIT}-train-labels-idx1-ubyte",
-    f"emnist-{EMNIST_SPLIT}-test-images-idx3-ubyte",
-    f"emnist-{EMNIST_SPLIT}-test-labels-idx1-ubyte",
-]
+kinds = (
+    "train-images-idx3-ubyte",
+    "train-labels-idx1-ubyte",
+    "test-images-idx3-ubyte",
+    "test-labels-idx1-ubyte",
+)
 
 with tempfile.TemporaryDirectory() as tmp:
     zip_path = Path(tmp) / "emnist.zip"
 
-    print(f"Downloading EMNIST zip (~500 MB, one-time) for split '{EMNIST_SPLIT}'")
+    print(f"Downloading EMNIST zip (~500 MB, one-time) for splits: {', '.join(EMNIST_SPLITS)}")
     download(EMNIST_URL, zip_path)
 
-    print("Extracting EMNIST split")
+    print("Extracting EMNIST splits")
     with zipfile.ZipFile(zip_path) as zf:
         names = zf.namelist()
-        for fname in emnist_files:
-            # files live somewhere like "gzip/<fname>.gz" inside the archive
-            member = next((n for n in names if n.endswith(fname + ".gz")), None)
-            if member is None:
-                raise FileNotFoundError(f"{fname}.gz not found in EMNIST zip")
+        for split in EMNIST_SPLITS:
+            for kind in kinds:
+                fname = f"emnist-{split}-{kind}"
+                # files live somewhere like "gzip/<fname>.gz" inside the archive
+                member = next((n for n in names if n.endswith(fname + ".gz")), None)
+                if member is None:
+                    raise FileNotFoundError(f"{fname}.gz not found in EMNIST zip")
 
-            out_path = emnist_dir / fname
-            with gzip.open(io.BytesIO(zf.read(member)), "rb") as f_in, open(out_path, "wb") as f_out:
-                shutil.copyfileobj(f_in, f_out)
-            print(f"  -> {out_path.name}")
+                out_path = emnist_dir / fname
+                with gzip.open(io.BytesIO(zf.read(member)), "rb") as f_in, open(out_path, "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            print(f"  {split} extracted")
 
 print("EMNIST downloaded\n")
 print("Datasets downloaded")

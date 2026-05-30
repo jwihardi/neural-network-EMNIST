@@ -15,7 +15,7 @@ int main(int argc, char *argv[]){
 
     if(argc < 5){
         std::cerr << "Usage: " << argv[0] 
-            << " <emnist/mnist> <epochs> <learning rate> <hidden size>\n";
+            << " <digits/letters/byclass> <epochs> <learning rate> <hidden size>\n";
         return 1;
     }
     std::string dataset_name = argv[1];
