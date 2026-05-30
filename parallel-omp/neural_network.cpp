@@ -79,19 +79,15 @@ void train(const Dataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Matrix& b
             {
                 /*      Forward     */
                 W1.multiply_into(X, Z1);
-                
-                #pragma omp single
-                {
-                    Z1.add(b1);
-                    Activations::relu_into(Z1, A1);
-                }
+                Z1.add(b1);
+                Activations::relu_into(Z1, A1);
 
                 W2.multiply_into(A1, Z2);
+                Z2.add(b2);
+                Activations::softmax_into(Z2, predictions);
+
                 #pragma omp single
                 {
-                    Z2.add(b2);
-                    Activations::softmax_into(Z2, predictions);
-
                     /* intermediate metrics */
                     for(int c = 0; c < batch_size; c++){
                         int actual = dataset.labels[start + c];
@@ -99,24 +95,19 @@ void train(const Dataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Matrix& b
                         tot_loss += Losses::cross_entropy(predictions, c, actual);
                     }
 
-                    /*      Backpropagation     */
-                    predictions.subtract_one_hot(dataset.labels, start);
                 }
+
+                /*      Backpropagation     */
+                predictions.subtract_one_hot(dataset.labels, start);
 
                 W2.transpose_multiply_into(predictions, dA1);
-                #pragma omp single
-                {
-                    Activations::relu_derivative_into(Z1, dZ1);
-                    dA1.hadamard_into(dZ1, dZ1);
-                }
+                Activations::relu_derivative_into(Z1, dZ1);
 
+                dA1.hadamard_into(dZ1, dZ1);
                 W2.subtract_outer_product(predictions, A1, gradient_scale);
                 W1.subtract_outer_product(dZ1, X, gradient_scale);
-                #pragma omp single
-                {
-                    b2.subtract_scaled(predictions, gradient_scale);
-                    b1.subtract_scaled(dZ1, gradient_scale);
-                }
+                b2.subtract_scaled(predictions, gradient_scale);
+                b1.subtract_scaled(dZ1, gradient_scale);
             }
         }
         const float processed = static_cast<float>(num_batches * batch_size);

@@ -64,6 +64,8 @@ void Matrix::hadamard_into(const Matrix& other, Matrix& out) const{
         throw std::runtime_error("hadamard_into: Invalid matrix dimensions (1)");
     if(out.rows != rows || out.cols != cols)
         throw std::runtime_error("hadamard_into: Invalid matrix dimensions (2)");
+
+    #pragma omp for
     for(std::size_t i = 0; i < data.size(); i++)
         out.data[i] = data[i] * other.data[i];
 }
@@ -94,10 +96,11 @@ void Matrix::add(const Matrix& other){
         throw std::runtime_error("add: Invalid dimensions for matrix addition (1)");
     
     if(cols == other.cols){ // normal matrix addition
-        for(int i = 0; i < rows; i++)
-        for(int u = 0; u < cols; u++)
-            data[i * cols + u] += other.data[i * cols + u];
+        #pragma omp for
+        for(int iu = 0; iu < cols * rows; iu++)
+            data[iu] += other.data[iu];
     }else if(other.cols == 1){ // broadcast addition over all columns
+        #pragma omp for
         for(int i = 0; i < rows; i++){
             const float b_i = other.data[i];
             for(int u = 0; u < cols; u++)
@@ -128,6 +131,7 @@ int Matrix::argmax(int col) const{
 }
 
 void Matrix::subtract_one_hot(const std::vector<uint8_t>& labels, int start){
+    #pragma omp for
     for(int i = 0; i < cols; i++){
         int label = labels[start + i];
         data[label * cols + i] -= 1.0f;
@@ -136,6 +140,7 @@ void Matrix::subtract_one_hot(const std::vector<uint8_t>& labels, int start){
 
 void Matrix::subtract_scaled(const Matrix& mat, float scale){
     const int batch_size = mat.cols;
+    #pragma omp for
     for(int i = 0; i < rows; i++){
         float curr_sum = 0.0f;
         for(int u = 0; u < batch_size; u++)
