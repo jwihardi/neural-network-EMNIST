@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <cblas.h>
 
 #include "data_loader.hpp"
 #include "matrix.hpp"
@@ -79,11 +80,17 @@ void train(const Dataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Matrix& b
             Matrix::load_image_into(dataset, start, batch_size, X);
             
             /*      Forward     */
-            W1.multiply_into(X, Z1);
+            cblas_sgemm(
+                    CblasRowMajor, CblasNoTrans, CblasNoTrans, W1.rows, X.cols, W1.cols, 1.0f, 
+                    W1.data.data(), W1.cols, X.data.data(), X.cols, 0.0f, Z1.data.data(), Z1.cols
+                    );
             Z1.add(b1);
             Activations::relu_into(Z1, A1);
 
-            W2.multiply_into(A1, Z2);
+            cblas_sgemm(
+                    CblasRowMajor, CblasNoTrans, CblasNoTrans, W2.rows, A1.cols, W2.cols, 1.0f,
+                    W2.data.data(), W2.cols, A1.data.data(), A1.cols, 0.0f, Z2.data.data(), Z2.cols
+                    );
             Z2.add(b2);
             Activations::softmax_into(Z2, predictions);
 
@@ -97,12 +104,22 @@ void train(const Dataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Matrix& b
             /*      Backpropagation     */
             predictions.subtract_one_hot(dataset.labels, start);
 
-            W2.transpose_multiply_into(predictions, dA1);
+            cblas_sgemm(
+                    CblasRowMajor, CblasTrans, CblasNoTrans, W2.cols, predictions.cols, W2.rows, 1.0f,
+                    W2.data.data(), W2.cols, predictions.data.data(), predictions.cols, 0.0f, dA1.data.data(), 
+                    dA1.cols);
+
             Activations::relu_derivative_into(Z1, dZ1);
             dA1.hadamard_into(dZ1, dZ1);
 
-            W2.subtract_outer_product(predictions, A1, gradient_scale);
-            W1.subtract_outer_product(dZ1, X, gradient_scale);
+            cblas_sgemm(
+                    CblasRowMajor, CblasNoTrans, CblasTrans, W2.rows, W2.cols, predictions.cols, -gradient_scale, 
+                    predictions.data.data(), predictions.cols, A1.data.data(), A1.cols, 1.0f, W2.data.data(), W2.cols
+                );
+            cblas_sgemm(
+                    CblasRowMajor, CblasNoTrans, CblasTrans, W1.rows, W1.cols, dZ1.cols, -gradient_scale, 
+                    dZ1.data.data(), dZ1.cols, X.data.data(), X.cols, 1.0f, W1.data.data(), W1.cols
+                    );
             b2.subtract_scaled(predictions, gradient_scale);
             b1.subtract_scaled(dZ1, gradient_scale);
 
@@ -134,12 +151,18 @@ void evaluate(const Dataset& dataset, const Matrix& W1, const Matrix& b1, const 
     for(unsigned int batch = 0; batch < num_batches; batch++){
         int start = batch * batch_size;
         Matrix::load_image_into(dataset, start, batch_size, X);
-        
-        W1.multiply_into(X, Z1);
+       
+        cblas_sgemm(
+                CblasRowMajor, CblasNoTrans, CblasNoTrans, W1.rows, X.cols, W1.cols, 1.0f, W1.data.data(),
+                W1.cols, X.data.data(), X.cols, 0.0f, Z1.data.data(), Z1.cols
+                );
         Z1.add(b1);
         Activations::relu_into(Z1, A1);
         
-        W2.multiply_into(A1, Z2);
+        cblas_sgemm(
+                CblasRowMajor, CblasNoTrans, CblasNoTrans, W2.rows, A1.cols, W2.cols, 1.0f, W2.data.data(),
+                W2.cols, A1.data.data(), A1.cols, 0.0f, Z2.data.data(), Z2.cols
+                );
         Z2.add(b2);
         Activations::softmax_into(Z2, predictions);
 
