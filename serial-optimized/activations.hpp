@@ -4,19 +4,21 @@
 
 struct Activations{
     inline static void softmax_into(const Matrix& in, Matrix& out){
-        float max_val = in.data[0];
-
-        for(int i = 1; i < in.rows; i++)
-            if(in.data[i] > max_val) max_val = in.data[i];
-
-        float sum = 0.0f;
-        for(int i = 0; i < in.rows; i++){
-            out.data[i] = std::exp(in.data[i] - max_val);
-            sum += out.data[i];
+        for(int i = 0; i < in.cols; i++){
+            float max_val = in.data[i];
+            for(int u = 0; u < in.rows; u++){
+                float val = in.data[u * in.cols + i];
+                if(val > max_val) max_val = val;
+            }
+            float sum = 0.0f;
+            for(int u = 0; u < in.rows; u++){
+                float exponent = std::exp(in.data[u * in.cols + i] - max_val);
+                out.data[u * in.cols + i] = exponent;
+                sum += exponent;
+            }
+            for(int u = 0; u < in.rows; u++)
+                out.data[u * in.cols + i] /= sum;
         }
-
-        for(int i = 0; i < in.rows; i++)
-            out.data[i] /= sum;
     }
 
     inline static void relu_into(const Matrix& in, Matrix& out){

@@ -12,25 +12,33 @@ void Matrix::multiply_into(const Matrix& other, Matrix& out) const{
     if(out.rows != rows || out.cols != other.cols)
         throw std::runtime_error("multiply_into: Invalid matrix dimensions (2)");
     
+    const int batch_size = other.cols;
+    const float * __restrict x = other.data.data();
+    float * __restrict o = out.data.data();
+
+    for(int i = 0; i < rows * batch_size; i++) o[i] = 0.0f;
+    
     for(int i = 0; i < rows; i++){
-        for(int u = 0; u < other.cols; u++){
-            float curr_sum = 0.0f;
-            for(int k = 0; k < cols; k++)
-                curr_sum += data[i * cols + k] * other.data[k * other.cols + u];
-            out.data[i * out.cols + u] = curr_sum;
+        float * __restrict out_row = o + i * batch_size;
+        for(int u = 0; u < cols; u++){
+            const float w = data[i * cols + u];
+            const float * __restrict x_row = x + u * batch_size;
+            for(int b = 0; b < batch_size; b++)
+                out_row[b] += w * x_row[b];
         }
     }
 }
 
 void Matrix::transpose_multiply_into(const Matrix& other, Matrix& out) const{
-    if(out.rows != cols || out.cols != 1)
+    if(out.rows != cols || out.cols != other.cols || other.rows != rows)
         throw std::runtime_error("transpose_multiply_into: Invalid matrix dimensions");
 
-    for(int i = 0; i < cols; i++){
+    for(int i = 0; i < cols; i++)
+    for(int c = 0; c < other.cols; c++){
         float curr_sum = 0.0f;
         for(int u = 0; u < rows; u++)
-            curr_sum += data[u * cols + i] * other.data[u];
-        out.data[i] = curr_sum;
+            curr_sum += data[u * cols + i] * other.data[u * other.cols + c];
+        out.data[i * out.cols + c] = curr_sum;
     }
 }
 
@@ -54,25 +62,41 @@ void Matrix::hadamard_into(const Matrix& other, Matrix& out) const{
 }
 
 void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float scale){
-    /* r and d do not overlap anything else */
-    const float * __restrict r = row.data.data();
-    float * __restrict d = data.data();
+    if(col.rows != rows || row.rows != cols || row.cols != col.cols) // lol weird
+        throw std::runtime_error("subtract_outer_product: Invalid matrix dimensions");
+    const int batch_size = col.cols;
+    const float * __restrict col_data = col.data.data();
+    const float * __restrict row_data = row.data.data();
+    float * __restrict out_data = data.data();
+
     for(int i = 0; i < rows; i++){
-        const float s = scale * col.data[i]; // computes the scalar once 
-        float * __restrict curr_row = d + i * cols;
-        for(int u = 0; u < cols; u++)
-            curr_row[u] -= s * r[u];
+        const float * __restrict curr_col = col_data + i * batch_size;
+        for(int u = 0; u < cols; u++){
+            const float * __restrict curr_row = row_data + u * batch_size;
+            float curr_sum = 0.0f;
+            for(int b = 0; b < batch_size; b++)
+                curr_sum += curr_col[b] * curr_row[b];
+            out_data[i * cols + u] -= scale * curr_sum;
+        }
     }
 }
 
 void Matrix::add(const Matrix& other){
-    if(rows != other.rows || cols != other.cols)
-        throw std::runtime_error("Invalid dimensions for matrix addition");
-
-    for(int i = 0; i < rows; i++){
+    if(rows != other.rows)
+        throw std::runtime_error("add: Invalid dimensions for matrix addition (1)");
+    
+    if(cols == other.cols){ // normal matrix addition
+        for(int i = 0; i < rows; i++)
         for(int u = 0; u < cols; u++)
             data[i * cols + u] += other.data[i * cols + u];
-    }
+    }else if(other.cols == 1){ // broadcast addition over all columns
+        for(int i = 0; i < rows; i++){
+            const float b_i = other.data[i];
+            for(int u = 0; u < cols; u++)
+                data[i * cols + u] += b_i;
+        }
+    }else
+        throw std::runtime_error("add: Invalid dimensions for matrix addition (2)");
 }
 
 Matrix Matrix::init_he(int rows_, int cols_, std::mt19937& rand){
@@ -84,23 +108,30 @@ Matrix Matrix::init_he(int rows_, int cols_, std::mt19937& rand){
     return matrix;
 }
 
-int Matrix::argmax() const{
+int Matrix::argmax(int col) const{
     int best_idx = 0;
-    float best_val = data[0];
+    float best_val = data[col];
 
-    for(std::size_t i = 0; i < data.size(); i++){
-        if(data[i] <= best_val) continue;
-        best_val = data[i];
-        best_idx = static_cast<int>(i);
+    for(int i = 1; i < rows; i++){
+        float val = data[i * cols + col];
+        if(val > best_val) { best_val = val; best_idx = i; }
     }
     return best_idx;
 }
 
-void Matrix::subtract_one_hot(int label){
-    data[label] -= 1.0f;
+void Matrix::subtract_one_hot(const std::vector<uint8_t>& labels, int start){
+    for(int i = 0; i < cols; i++){
+        int label = labels[start + i];
+        data[label * cols + i] -= 1.0f;
+    }
 }
 
 void Matrix::subtract_scaled(const Matrix& mat, float scale){
-    for(std::size_t i = 0; i < data.size(); i++)
-        data[i] -= scale * mat.data[i];
+    const int batch_size = mat.cols;
+    for(int i = 0; i < rows; i++){
+        float curr_sum = 0.0f;
+        for(int u = 0; u < batch_size; u++)
+            curr_sum += mat.data[i * batch_size + u];
+        data[i] -= scale * curr_sum;
+    }
 }

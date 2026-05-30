@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <random>
+#include <cstdint>
+
 #include "data_loader.hpp"
 
 struct Matrix{
@@ -24,9 +26,9 @@ struct Matrix{
 
     static Matrix init_he(int, int, std::mt19937&);
 
-    int argmax() const;
+    int argmax(int) const;
     
-    void subtract_one_hot(int);
+    void subtract_one_hot(const std::vector<uint8_t>&, int);
 
     void subtract_scaled(const Matrix&, float);
 };
