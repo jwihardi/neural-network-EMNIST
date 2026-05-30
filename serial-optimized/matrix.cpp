@@ -24,7 +24,7 @@ void Matrix::multiply_into(const Matrix& other, Matrix& out) const{
 
 void Matrix::transpose_multiply_into(const Matrix& other, Matrix& out) const{
     if(out.rows != cols || out.cols != 1)
-        throw std::runtime_error("tranpose_multiply_into: Invalid matrix dimensions");
+        throw std::runtime_error("transpose_multiply_into: Invalid matrix dimensions");
 
     for(int i = 0; i < cols; i++){
         float curr_sum = 0.0f;
@@ -51,7 +51,6 @@ void Matrix::hadamard_into(const Matrix& other, Matrix& out) const{
         throw std::runtime_error("hadamard_into: Invalid matrix dimensions (2)");
     for(std::size_t i = 0; i < data.size(); i++)
         out.data[i] = data[i] * other.data[i];
-
 }
 
 void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float scale){
