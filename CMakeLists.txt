@@ -5,6 +5,15 @@ project(neural_network LANGUAGES CXX)
 # Put built executables in the project root, not inside build/
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+if(NOT DEFINED CMAKE_CUDA_HOST_COMPILER)
+    set(CMAKE_CUDA_HOST_COMPILER g++-14)
+endif()
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES 75 80 86 89)
+endif()
+include(CheckLanguage)
+check_language(CUDA)
+
 # OpenMP for the parallel-omp target (adds -fopenmp to compile + link)
 find_package(OpenMP REQUIRED)
 
@@ -74,4 +83,20 @@ if(BLAS_FOUND)
 else()
     message(WARNING "BLAS not found; skipping parallel-cblas-nn target. "
                     "Install a CBLAS (e.g. 'emerge sci-libs/openblas') and re-run cmake.")
+endif()
+
+if(CMAKE_CUDA_COMPILER)
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    add_executable(parallel-cuda-nn
+        parallel-cuda/neural_network.cu
+        parallel-cuda/matrix.cu
+    )
+    target_compile_features(parallel-cuda-nn PRIVATE cxx_std_20 cuda_std_20)
+    target_compile_options(parallel-cuda-nn PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-O3;--use_fast_math;-Xcompiler=-O3,-march=native>)
+    target_link_libraries(parallel-cuda-nn PRIVATE CUDA::cublas CUDA::cudart)
+else()
+    message(WARNING "CUDA toolkit not found; skipping parallel-cuda-nn target. "
+                    "Install the CUDA toolkit (nvcc) and re-run cmake.")
 endif()
