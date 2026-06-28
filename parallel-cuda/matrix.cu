@@ -4,6 +4,7 @@
 #include <string>
 
 #include <cuda_runtime.h>
+#include <cublas_v2.h>
 
 #include "matrix.hpp"
 #include "data_loader.hpp"
@@ -14,6 +15,21 @@
         if(err_ != cudaSuccess)                                                                     \
             throw std::runtime_error(std::string("cuda: ") + cudaGetErrorString(err_));             \
     }while(0)
+
+#define CUBLAS_CHECK(call)                                                                          \
+    do{                                                                                             \
+        if((call) != CUBLAS_STATUS_SUCCESS)                                                         \
+            throw std::runtime_error("cublas call failed");                                         \
+    }while(0)
+
+static cublasHandle_t cublas_handle(){
+    static cublasHandle_t handle = []{
+        cublasHandle_t h;
+        CUBLAS_CHECK(cublasCreate(&h));
+        return h;
+    }();
+    return handle;
+}
 
 Matrix::Matrix(int rows_, int cols_) : rows(rows_), cols(cols_){
     std::size_t bytes = sizeof(float) * static_cast<std::size_t>(rows_) * static_cast<std::size_t>(cols_);
@@ -58,34 +74,28 @@ void Matrix::multiply_into(const Matrix& other, Matrix& out) const{
     if(out.rows != rows || out.cols != other.cols)
         throw std::runtime_error("multiply_into: Invalid matrix dimensions (2)");
     
-    const int batch_size = other.cols;
-    const float * __restrict x = other.data.data();
-    float * __restrict o = out.data.data();
-
-    for(int i = 0; i < rows * batch_size; i++) o[i] = 0.0f;
-    
-    for(int i = 0; i < rows; i++){
-        float * __restrict out_row = o + i * batch_size;
-        for(int u = 0; u < cols; u++){
-            const float w = data[i * cols + u];
-            const float * __restrict x_row = x + u * batch_size;
-            for(int b = 0; b < batch_size; b++)
-                out_row[b] += w * x_row[b];
-        }
-    }
+    const float alpha = 1.0f, beta = 0.0f;
+    CUBLAS_CHECK(cublasSgemm(cublas_handle(), CUBLAS_OP_N, CUBLAS_OP_N,
+        other.cols, rows, cols,
+        &alpha,
+        other.data, other.cols,
+        data, cols,
+        &beta,
+        out.data, other.cols));
 }
 
 void Matrix::transpose_multiply_into(const Matrix& other, Matrix& out) const{
     if(out.rows != cols || out.cols != other.cols || other.rows != rows)
         throw std::runtime_error("transpose_multiply_into: Invalid matrix dimensions");
 
-    for(int i = 0; i < cols; i++)
-    for(int c = 0; c < other.cols; c++){
-        float curr_sum = 0.0f;
-        for(int u = 0; u < rows; u++)
-            curr_sum += data[u * cols + i] * other.data[u * other.cols + c];
-        out.data[i * out.cols + c] = curr_sum;
-    }
+    const float alpha = 1.0f, beta = 0.0f;
+    CUBLAS_CHECK(cublasSgemm(cublas_handle(), CUBLAS_OP_N, CUBLAS_OP_T,
+        other.cols, cols, rows,
+        &alpha,
+        other.data, other.cols,
+        data, cols,
+        &beta,
+        out.data, other.cols));
 }
 
 void Matrix::hadamard_into(const Matrix& other, Matrix& out) const{
@@ -132,20 +142,14 @@ void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float 
         throw std::runtime_error("subtract_outer_product: Invalid matrix dimensions");
 
     const int batch_size = col.cols;
-    const float * __restrict col_data = col.data.data();
-    const float * __restrict row_data = row.data.data();
-    float * __restrict out_data = data.data();
-
-    for(int i = 0; i < rows; i++){
-        const float * __restrict curr_col = col_data + i * batch_size;
-        for(int u = 0; u < cols; u++){
-            const float * __restrict curr_row = row_data + u * batch_size;
-            float curr_sum = 0.0f;
-            for(int b = 0; b < batch_size; b++)
-                curr_sum += curr_col[b] * curr_row[b];
-            out_data[i * cols + u] -= scale * curr_sum;
-        }
-    }
+    const float alpha = -scale, beta = 1.0f;
+    CUBLAS_CHECK(cublasSgemm(cublas_handle(), CUBLAS_OP_T, CUBLAS_OP_N,
+        cols, rows, batch_size,
+        &alpha,
+        row.data, batch_size,
+        col.data, batch_size,
+        &beta,
+        data, cols));
 }
 
 void Matrix::subtract_one_hot(const std::vector<uint8_t>& labels, int start){
