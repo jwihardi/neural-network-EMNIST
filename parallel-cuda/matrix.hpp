@@ -7,10 +7,15 @@
 struct Dataset;
 
 struct Matrix{
-    std::vector<float> data;
+    float *data = nullptr; // device pointer
     int rows, cols;
 
     Matrix(int, int);
+    ~Matrix();
+    Matrix(Matrix&&) noexcept;
+    Matrix(const Matrix&) = delete;
+    Matrix& operator=(const Matrix&) = delete;
+
     static Matrix init_he(int, int, std::mt19937&);
     static void load_image_into(const Dataset&, int, int, Matrix&);
 

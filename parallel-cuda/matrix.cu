@@ -1,10 +1,33 @@
 #include <stdexcept>
 #include <random>
 #include <cstddef>
+#include <string>
+
+#include <cuda_runtime.h>
+
 #include "matrix.hpp"
 #include "data_loader.hpp"
 
-Matrix::Matrix(int rows_, int cols_) : data(rows_ * cols_), rows(rows_), cols(cols_) {}
+#define CUDA_CHECK(call)                                                                            \
+    do{                                                                                             \
+        cudaError_t err_ = (call);                                                                  \
+        if(err_ != cudaSuccess)                                                                     \
+            throw std::runtime_error(std::string("cuda: ") + cudaGetErrorString(err_));             \
+    }while(0)
+
+Matrix::Matrix(int rows_, int cols_) : rows(rows_), cols(cols_){
+    std::size_t bytes = sizeof(float) * static_cast<std::size_t>(rows_) * static_cast<std::size_t>(cols_);
+    CUDA_CHECK(cudaMalloc(&data, bytes));
+    CUDA_CHECK(cudaMemset(data, 0, bytes));
+}
+
+Matrix::~Matrix(){
+    if(data) cudaFree(data);
+}
+
+Matrix::Matrix(Matrix&& other) noexcept : data(other.data), rows(other.rows), cols(other.cols){
+    other.data = nullptr;
+}
 
 void Matrix::load_image_into(const Dataset& dataset, int start_idx, int batch_size, Matrix& out){
     int image_size = dataset.height * dataset.width;
@@ -21,9 +44,11 @@ Matrix Matrix::init_he(int rows_, int cols_, std::mt19937& rand){
     float stddev = std::sqrt(2.0f / static_cast<float>(cols_));
     std::normal_distribution<float> dist(0.0f, stddev);
 
-    for(std::size_t i = 0; i < matrix.data.size(); i++)
-        matrix.data[i] = dist(rand);
+    std::vector<float> host(static_cast<std::size_t>(rows_) * static_cast<std::size_t>(cols_));
+    for(std::size_t i = 0; i < host.size(); i++)
+        host[i] = dist(rand);
 
+    CUDA_CHECK(cudaMemcpy(matrix.data, host.data(), sizeof(float) * host.size(), cudaMemcpyHostToDevice));
     return matrix;
 }
 
