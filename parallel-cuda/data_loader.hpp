@@ -11,7 +11,7 @@ static constexpr int IMAGE_MAGIC = 2051;
 static constexpr int LABEL_MAGIC = 2049;
 
 struct Dataset{
-    std::vector<float> images;
+    std::vector<uint8_t> images; // raw pixels, normalization happens on the gpu
     std::vector<uint8_t> labels;
 
     unsigned int num_samples, height, width, num_classes;
@@ -57,15 +57,11 @@ inline Dataset load_images(const std::string& image_file_path, int num_classes){
     Dataset dataset(height, width, num_classes, num_images);
 
     const std::size_t total = static_cast<std::size_t>(num_images) * static_cast<std::size_t>(image_size);
-    std::vector<uint8_t> raw(total);
 
-    file.read(reinterpret_cast<char *>(raw.data()), static_cast<std::streamsize>(total));
+    file.read(reinterpret_cast<char *>(dataset.images.data()), static_cast<std::streamsize>(total));
     if(static_cast<std::size_t>(file.gcount()) != total)
         throw std::runtime_error("load_images: Failed to read image data (short read)");
 
-    for(std::size_t i = 0; i < total; i++){
-        dataset.images[i] = raw[i] / 255.0f;
-    }
     return dataset;
 }
 

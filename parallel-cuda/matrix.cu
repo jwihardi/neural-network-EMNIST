@@ -36,6 +36,11 @@ static cublasHandle_t cublas_handle(){
     return handle;
 }
 
+__global__ void normalize_kernel(const uint8_t *in, float *out, int n){
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n) out[idx] = in[idx] / 255.0f;
+}
+
 __global__ void gather_batch_kernel(const float *images, float *out, int start, int batch_size, int image_size){
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if(idx >= image_size * batch_size) return;
@@ -132,12 +137,19 @@ DeviceDataset::DeviceDataset(const Dataset& dataset) :
     num_samples(static_cast<int>(dataset.num_samples)),
     image_size(static_cast<int>(dataset.height * dataset.width))
 {
-    std::size_t image_bytes = sizeof(float) * dataset.images.size();
-    CUDA_CHECK(cudaMalloc(&images, image_bytes));
-    CUDA_CHECK(cudaMemcpy(images, dataset.images.data(), image_bytes, cudaMemcpyHostToDevice));
+    uint8_t *staging = nullptr;
+    CUDA_CHECK(cudaMalloc(&staging, dataset.images.size()));
+    CUDA_CHECK(cudaMemcpy(staging, dataset.images.data(), dataset.images.size(), cudaMemcpyHostToDevice));
+
+    int total = num_samples * image_size;
+    CUDA_CHECK(cudaMalloc(&images, sizeof(float) * dataset.images.size()));
+    normalize_kernel<<<blocks_for(total), BLOCK>>>(staging, images, total);
 
     CUDA_CHECK(cudaMalloc(&labels, dataset.labels.size()));
     CUDA_CHECK(cudaMemcpy(labels, dataset.labels.data(), dataset.labels.size(), cudaMemcpyHostToDevice));
+
+    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaFree(staging));
 }
 
 DeviceDataset::~DeviceDataset(){
