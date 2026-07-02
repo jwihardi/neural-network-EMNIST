@@ -36,18 +36,14 @@ static cublasHandle_t cublas_handle(){
     return handle;
 }
 
-__global__ void normalize_kernel(const uint8_t *in, float *out, int n){
+/* pixel major so a batch is just a column range of the full dataset */
+__global__ void normalize_transpose_kernel(const uint8_t *in, float *out, int num_samples, int image_size){
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx < n) out[idx] = in[idx] / 255.0f;
-}
+    if(idx >= num_samples * image_size) return;
 
-__global__ void gather_batch_kernel(const float *images, float *out, int start, int batch_size, int image_size){
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= image_size * batch_size) return;
-
-    int pixel = idx / batch_size;
-    int b = idx % batch_size;
-    out[idx] = images[(start + b) * image_size + pixel];
+    int pixel = idx / num_samples;
+    int sample = idx % num_samples;
+    out[idx] = in[sample * image_size + pixel] / 255.0f;
 }
 
 __global__ void add_kernel(float *a, const float *b, int n){
@@ -143,7 +139,7 @@ DeviceDataset::DeviceDataset(const Dataset& dataset) :
 
     int total = num_samples * image_size;
     CUDA_CHECK(cudaMalloc(&images, sizeof(float) * dataset.images.size()));
-    normalize_kernel<<<blocks_for(total), BLOCK>>>(staging, images, total);
+    normalize_transpose_kernel<<<blocks_for(total), BLOCK>>>(staging, images, num_samples, image_size);
 
     CUDA_CHECK(cudaMalloc(&labels, dataset.labels.size()));
     CUDA_CHECK(cudaMemcpy(labels, dataset.labels.data(), dataset.labels.size(), cudaMemcpyHostToDevice));
@@ -178,17 +174,21 @@ void Metrics::read(float& loss_out, int& correct_out) const{
     CUDA_CHECK(cudaMemcpy(&correct_out, correct, sizeof(int), cudaMemcpyDeviceToHost));
 }
 
-Matrix::Matrix(int rows_, int cols_) : rows(rows_), cols(cols_){
+Matrix::Matrix(int rows_, int cols_) : rows(rows_), cols(cols_), ld(cols_){
     std::size_t bytes = sizeof(float) * static_cast<std::size_t>(rows_) * static_cast<std::size_t>(cols_);
     CUDA_CHECK(cudaMalloc(&data, bytes));
     CUDA_CHECK(cudaMemset(data, 0, bytes));
 }
 
+Matrix::Matrix(float *data_, int rows_, int cols_, int ld_) :
+    data(data_), rows(rows_), cols(cols_), ld(ld_), owns(false) {}
+
 Matrix::~Matrix(){
-    if(data) cudaFree(data);
+    if(data && owns) cudaFree(data);
 }
 
-Matrix::Matrix(Matrix&& other) noexcept : data(other.data), rows(other.rows), cols(other.cols){
+Matrix::Matrix(Matrix&& other) noexcept :
+    data(other.data), rows(other.rows), cols(other.cols), ld(other.ld), owns(other.owns){
     other.data = nullptr;
 }
 
@@ -205,9 +205,8 @@ Matrix Matrix::init_he(int rows_, int cols_, std::mt19937& rand){
     return matrix;
 }
 
-void Matrix::load_image_into(const DeviceDataset& dataset, int start_idx, int batch_size, Matrix& out){
-    int total = dataset.image_size * batch_size;
-    gather_batch_kernel<<<blocks_for(total), BLOCK>>>(dataset.images, out.data, start_idx, batch_size, dataset.image_size);
+Matrix Matrix::batch_view(const DeviceDataset& dataset, int start_idx, int batch_size){
+    return Matrix(dataset.images + start_idx, dataset.image_size, batch_size, dataset.num_samples);
 }
 
 void Matrix::multiply_into(const Matrix& other, Matrix& out) const{
@@ -220,10 +219,10 @@ void Matrix::multiply_into(const Matrix& other, Matrix& out) const{
     CUBLAS_CHECK(cublasSgemm(cublas_handle(), CUBLAS_OP_N, CUBLAS_OP_N,
         other.cols, rows, cols,
         &alpha,
-        other.data, other.cols,
-        data, cols,
+        other.data, other.ld,
+        data, ld,
         &beta,
-        out.data, other.cols));
+        out.data, out.ld));
 }
 
 void Matrix::transpose_multiply_into(const Matrix& other, Matrix& out) const{
@@ -234,10 +233,10 @@ void Matrix::transpose_multiply_into(const Matrix& other, Matrix& out) const{
     CUBLAS_CHECK(cublasSgemm(cublas_handle(), CUBLAS_OP_N, CUBLAS_OP_T,
         other.cols, cols, rows,
         &alpha,
-        other.data, other.cols,
-        data, cols,
+        other.data, other.ld,
+        data, ld,
         &beta,
-        out.data, other.cols));
+        out.data, out.ld));
 }
 
 void Matrix::hadamard_into(const Matrix& other, Matrix& out) const{
@@ -290,10 +289,10 @@ void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float 
     CUBLAS_CHECK(cublasSgemm(cublas_handle(), CUBLAS_OP_T, CUBLAS_OP_N,
         cols, rows, batch_size,
         &alpha,
-        row.data, batch_size,
-        col.data, batch_size,
+        row.data, row.ld,
+        col.data, col.ld,
         &beta,
-        data, cols));
+        data, ld));
 }
 
 void Matrix::subtract_one_hot(const DeviceDataset& dataset, int start){

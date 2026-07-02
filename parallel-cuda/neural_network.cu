@@ -57,12 +57,10 @@ int main(int argc, char *argv[]){
 }
 
 void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Matrix& b2, int epochs, float learning_rate, int batch_size){
-    int input_size = dataset.image_size;
     int hidden_size = W1.rows;
     int num_labels = W2.rows;
     const float gradient_scale = learning_rate / static_cast<float>(batch_size);
 
-    Matrix X(input_size, batch_size);
     Matrix Z1(hidden_size, batch_size);
     Matrix A1(hidden_size, batch_size);
     Matrix Z2(num_labels, batch_size);
@@ -80,7 +78,7 @@ void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Mat
 
         for(int batch = 0; batch < num_batches; batch++){
             int start = batch * batch_size;
-            Matrix::load_image_into(dataset, start, batch_size, X);
+            Matrix X = Matrix::batch_view(dataset, start, batch_size);
 
             /*      Forward     */
             W1.multiply_into(X, Z1);
@@ -119,11 +117,9 @@ void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Mat
 }
 
 void evaluate(const DeviceDataset& dataset, const Matrix& W1, const Matrix& b1, const Matrix& W2, const Matrix& b2, int batch_size){
-    int input_size = dataset.image_size;
     int hidden_size = W1.rows;
     int num_labels = W2.rows;
 
-    Matrix X(input_size, batch_size);
     Matrix Z1(hidden_size, batch_size);
     Matrix A1(hidden_size, batch_size);
     Matrix Z2(num_labels, batch_size);
@@ -136,7 +132,7 @@ void evaluate(const DeviceDataset& dataset, const Matrix& W1, const Matrix& b1, 
 
     for(int batch = 0; batch < num_batches; batch++){
         int start = batch * batch_size;
-        Matrix::load_image_into(dataset, start, batch_size, X);
+        Matrix X = Matrix::batch_view(dataset, start, batch_size);
 
         W1.multiply_into(X, Z1);
         Z1.add(b1);

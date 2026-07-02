@@ -33,15 +33,18 @@ struct Metrics{
 struct Matrix{
     float *data = nullptr; // device pointer
     int rows, cols;
+    int ld; // row stride, lets a matrix be a column slice of a bigger one
+    bool owns = true;
 
     Matrix(int, int);
+    Matrix(float*, int, int, int); // non owning view
     ~Matrix();
     Matrix(Matrix&&) noexcept;
     Matrix(const Matrix&) = delete;
     Matrix& operator=(const Matrix&) = delete;
 
     static Matrix init_he(int, int, std::mt19937&);
-    static void load_image_into(const DeviceDataset&, int, int, Matrix&);
+    static Matrix batch_view(const DeviceDataset&, int, int);
 
     void multiply_into(const Matrix&, Matrix&) const;
     void transpose_multiply_into(const Matrix&, Matrix&) const;
