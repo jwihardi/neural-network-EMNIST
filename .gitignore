@@ -13,3 +13,4 @@ unoptimized-serial-nn
 optimized-serial-nn
 parallel-omp-nn
 parallel-cblas-nn
+parallel-cuda-nn
