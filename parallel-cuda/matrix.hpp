@@ -67,8 +67,9 @@ struct Matrix{
     void softmax_bias_into(const Matrix&, Matrix&) const;
     void relu_backward(const Matrix&);
 
-    void subtract_scaled(const Matrix&, float);
-    void subtract_outer_product(const Matrix&, const Matrix&, float);
+    void subtract_scaled(const Matrix&, Matrix&, float, float);
+    void accumulate_outer_product(const Matrix&, const Matrix&, float);
+    void subtract_velocity(const Matrix&, float);
 
     void accumulate_metrics(const DeviceDataset&, int, Metrics&);
 };

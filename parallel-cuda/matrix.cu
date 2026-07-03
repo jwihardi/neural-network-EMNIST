@@ -78,14 +78,22 @@ __global__ void relu_backward_kernel(float *grad, const float *activation, int n
     if(idx < n && activation[idx] <= 0.0f) grad[idx] = 0.0f;
 }
 
-__global__ void subtract_scaled_kernel(float *bias, const float *mat, int rows, int batch_size, float scale){
+__global__ void subtract_scaled_kernel(float *bias, const float *mat, float *velocity, int rows, int batch_size, float momentum, float scale){
     int row = blockIdx.x * blockDim.x + threadIdx.x;
     if(row >= rows) return;
 
     float curr_sum = 0.0f;
     for(int u = 0; u < batch_size; u++)
         curr_sum += mat[row * batch_size + u];
-    bias[row] -= scale * curr_sum;
+
+    float v = momentum * velocity[row] + curr_sum;
+    velocity[row] = v;
+    bias[row] -= scale * v;
+}
+
+__global__ void subtract_velocity_kernel(float *w, const float *velocity, float scale, int n){
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n) w[idx] -= scale * velocity[idx];
 }
 
 __global__ void metrics_kernel(float *predictions, const uint8_t *labels, int start,
@@ -247,16 +255,16 @@ void Matrix::relu_backward(const Matrix& activation){
     relu_backward_kernel<<<blocks_for(n), BLOCK, 0, gpu_stream()>>>(data, activation.data, n);
 }
 
-void Matrix::subtract_scaled(const Matrix& mat, float scale){
-    subtract_scaled_kernel<<<blocks_for(rows), BLOCK, 0, gpu_stream()>>>(data, mat.data, rows, mat.cols, scale);
+void Matrix::subtract_scaled(const Matrix& mat, Matrix& velocity, float momentum, float scale){
+    subtract_scaled_kernel<<<blocks_for(rows), BLOCK, 0, gpu_stream()>>>(data, mat.data, velocity.data, rows, mat.cols, momentum, scale);
 }
 
-void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float scale){
+void Matrix::accumulate_outer_product(const Matrix& col, const Matrix& row, float momentum){
     if(col.rows != rows || row.rows != cols || row.cols != col.cols) // lol weird
-        throw std::runtime_error("subtract_outer_product: Invalid matrix dimensions");
+        throw std::runtime_error("accumulate_outer_product: Invalid matrix dimensions");
 
     const int batch_size = col.cols;
-    const float alpha = -scale, beta = 1.0f;
+    const float alpha = 1.0f, beta = momentum;
     CUBLAS_CHECK(cublasSgemm(cublas_handle(), CUBLAS_OP_T, CUBLAS_OP_N,
         cols, rows, batch_size,
         &alpha,
@@ -264,6 +272,11 @@ void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float 
         col.data, col.ld,
         &beta,
         data, ld));
+}
+
+void Matrix::subtract_velocity(const Matrix& velocity, float scale){
+    int n = rows * cols;
+    subtract_velocity_kernel<<<blocks_for(n), BLOCK, 0, gpu_stream()>>>(data, velocity.data, scale, n);
 }
 
 void Matrix::accumulate_metrics(const DeviceDataset& dataset, int start, Metrics& metrics){
