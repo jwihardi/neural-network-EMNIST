@@ -15,7 +15,7 @@ Missing BLAS or CUDA just skips that target with a warning.
 ## Setup
 
 ```sh
-python3 import_datasets.py      # one-time ~500 MB EMNIST pull into emnist/
+python3 import_datasets.py
 mkdir -p build && cd build && cmake .. && make
 ```
 
