@@ -2,18 +2,24 @@
 
 > **Tools:** C++20 + OpenMP (`-fopenmp`), all cores.
 
-[serial-optimized](../serial-optimized/README.md) with OpenMP work-sharing. One `#pragma omp parallel` region spans each batch's forward/backward pass, and every matrix op runs an `omp for` inside it — the thread team is created once per batch, not once per op. `nowait` drops barriers between ops that touch independent data, and the metrics loop uses a `reduction(+:correct, tot_loss)`.
+[serial-optimized](../serial-optimized/README.md)'s loops, unchanged, spread across threads.
 
-## Performance
-Scales with cores until memory bandwidth runs out. ~56 s on the byclass reference config (3 epochs, hidden 512, batch 128) — ~4–5× over serial, but burning 14 minutes of CPU time to get there.
+## Why it beats serial-optimized
 
-## Upsides
-- Tiny code delta from serial-optimized; the pragmas are the whole diff.
-- No libraries beyond the compiler's OpenMP runtime.
+More cores on already-parallel work. The batched loops are embarrassingly parallel across output rows, so `#pragma omp for` splits them with no algorithm change:
 
-## Downsides
-- Hand-rolled GEMM loops don't block/tile for cache the way BLAS does, so throughput per core is far below peak — more threads mostly means hitting the bandwidth wall sooner.
-- Implicit barriers between work-shared loops add sync overhead every op, every batch.
+- One `#pragma omp parallel` region spans each batch's whole forward/backward pass — the thread team is created **once per batch**, not once per op, which matters when each op is only microseconds.
+- `nowait` removes the implicit barrier between ops that touch independent data; the metrics loop folds into a `reduction(+:correct, tot_loss)`.
 
-## vs the others
-Same loops as serial-optimized, just spread across threads. [parallel-cblas](../parallel-cblas/README.md) beats it (~4×) with better single-op code rather than more parallelism; [parallel-cuda](../parallel-cuda/README.md) is ~20× faster.
+## Why the speedup isn't linear
+
+It inherits serial-optimized's weakness instead of fixing it:
+
+- **The per-core code is still naive.** No register blocking, no cache tiling — each thread streams its rows at the same per-core efficiency as the serial build. 16 threads means 16 streams competing for the same memory bus, and DRAM bandwidth saturates long before the cores do.
+- **Barriers between dependent ops** (GEMM → bias → activation → GEMM…) sync the whole team many times per batch.
+
+Net: ~4–5× over serial on the byclass reference config (55.7 s), while burning ~14 minutes of aggregate CPU time — poor work-efficiency for the wall time it buys.
+
+## Next rung
+
+[parallel-cblas](../parallel-cblas/README.md) shows the counterintuitive result: better single-op code beats more threads — it's ~4× faster than this while doing *less* parallelism-engineering.

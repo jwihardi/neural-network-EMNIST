@@ -2,18 +2,23 @@
 
 > **Tools:** C++20 + CBLAS (OpenBLAS, internally threaded).
 
-[serial-optimized](../serial-optimized/README.md) with the four hot matmuls (two forward, two weight-gradient — the gradients fold the `-lr/batch` scale and accumulation into `alpha`/`beta`) replaced by `cblas_sgemm` calls. Everything else — bias adds, activations, softmax, metrics — stays the same serial code.
+[serial-optimized](../serial-optimized/README.md) with the four hot matmuls (two forward, two weight-gradient) replaced by `cblas_sgemm`. Everything else — biases, activations, softmax, metrics — is untouched serial code.
 
-## Performance
-Fastest CPU variant: ~12.6 s on the byclass reference config (3 epochs, hidden 512, batch 128), ~4× over OpenMP. OpenBLAS brings blocked, vectorized, multi-threaded GEMM kernels that the hand-rolled loops can't match.
+## Why it beats parallel-omp
 
-## Upsides
-- Near-peak CPU throughput for the ~95% of FLOPs that live in the GEMMs, for a ~10-line diff per call site.
-- The `alpha`/`beta` trick removes the separate scale-and-subtract passes entirely.
+Same thread count, radically better per-op code. OpenBLAS GEMM kernels do everything the hand-rolled loops don't:
 
-## Downsides
-- Amdahl: only the matmuls are parallel; softmax, biases, and metrics are serial between every sgemm.
-- OpenBLAS thread pool overhead dominates at small batch sizes / hidden sizes.
+- **Cache tiling + packed panels** — operands are copied into blocked, contiguous layouts so every level of cache is reused to near its capacity, instead of streaming from DRAM.
+- **Register-blocked microkernels** — hand-tuned AVX-512 inner kernels keep ~all FMA units busy; the naive loops reach a fraction of that.
+- **The `alpha`/`beta` fold** — the weight update runs as `W = -lr/B · dZ·Xᵀ + 1.0 · W` in a single sgemm, deleting the separate scale-and-subtract pass over the weights entirely.
 
-## vs the others
-Same structure as parallel-omp but wins on per-op quality, not thread count. [parallel-cuda](../parallel-cuda/README.md) applies the identical "call a GEMM library" idea on the GPU and adds what CBLAS can't: keeping the data resident between ops.
+So where OMP saturated the memory bus with inefficient streams, this actually converts bandwidth into FLOPs: 12.6 s on the byclass reference config, ~4.4× over OMP with far less CPU burn.
+
+## What still limits it
+
+- **Amdahl.** Only the GEMMs are parallel; softmax, bias adds, and metrics run serial between every sgemm call, and every op is a full pass over the data in and out of memory.
+- **Thread-pool overhead** — dispatching OpenBLAS threads costs more than small GEMMs are worth, so tiny batches/hidden sizes lose to plain serial.
+
+## Next rung
+
+[parallel-cuda](../parallel-cuda/README.md) applies the same "call a GEMM library" idea on hardware with ~10× the bandwidth — and then removes the two costs this version can't: data movement between ops, and the serial gaps between them.

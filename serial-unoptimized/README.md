@@ -2,18 +2,23 @@
 
 > **Tools:** plain C++20, one thread, no libraries.
 
-The baseline. Trains one sample at a time — every "matrix op" is a naive nested loop over a single column, so forward/backward is a chain of vector-times-matrix operations with no data reuse.
+The baseline. Trains one sample at a time: forward/backward is a chain of matrix-vector products written as naive nested loops.
 
-## Performance
-Slowest by orders of magnitude. Per-sample SGD means the weight matrices are re-read from memory for every single image, so it is memory-bound with zero arithmetic intensity. ~15 s for one epoch of `digits` (240k images) where the GPU version takes ~0.1 s.
+## Why it's slow
 
-## Upsides
-- Easiest to read; the math maps 1:1 onto the code.
-- The reference the other four implementations are checked against.
+Everything comes down to one number: the weights are re-read and re-written **once per sample**.
 
-## Downsides
-- No batching, so no cache reuse, no vectorization-friendly inner loops, nothing for a BLAS/GPU to chew on.
-- CLI takes no batch args (`<dataset> <epochs> <lr> <hidden>`), so it can't even run the same configs as the rest.
+- Forward does `W1 (hidden×784) · x (784)` — all of `W1` streams through the core to produce one column of output. There is no reuse: each weight is loaded, used for a single multiply-add, and evicted.
+- The gradient step `W -= lr · (dz ⊗ x)` writes **every element of both weight matrices for every image**. On `digits` that's 240k full read-modify-write passes over the weights per epoch.
+- The dot-product inner loops walk columns with a stride, so the compiler can't vectorize them well either.
 
-## vs the others
-Every other variant starts from mini-batches; this one exists to show what that restructuring alone (see [serial-optimized](../serial-optimized/README.md)) buys before any parallelism is added.
+The FLOP count is identical to every other variant — the machine just spends nearly all its time moving the same bytes through the cache hierarchy over and over. ~15 s for one epoch of `digits` (240k images); the same epoch takes ~0.1 s on the GPU.
+
+## What it's for
+
+- The readable reference: the math maps 1:1 onto the code, and the other four variants are checked against its results.
+- CLI is `<dataset> <epochs> <lr> <hidden>` — no batch args, because there are no batches.
+
+## Next rung
+
+[serial-optimized](../serial-optimized/README.md) fixes exactly one thing — amortizing the weight traffic over a batch — and gets ~2.5× on the same single core.
