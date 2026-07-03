@@ -17,38 +17,6 @@ def download(url: str, dest: Path) -> None:
         shutil.copyfileobj(resp, f)
 
 
-def extract_gz(gz_path: Path, out_path: Path) -> None:
-    """Decompress a .gz file to out_path."""
-    with gzip.open(gz_path, "rb") as f_in, open(out_path, "wb") as f_out:
-        shutil.copyfileobj(f_in, f_out)
-
-
-# ---------------------------------------------------------------------------
-# MNIST  (per-file gzipped idx, one CDN file each)
-# ---------------------------------------------------------------------------
-mnist_urls = [
-    "https://storage.googleapis.com/cvdf-datasets/mnist/train-images-idx3-ubyte.gz",
-    "https://storage.googleapis.com/cvdf-datasets/mnist/train-labels-idx1-ubyte.gz",
-    "https://storage.googleapis.com/cvdf-datasets/mnist/t10k-images-idx3-ubyte.gz",
-    "https://storage.googleapis.com/cvdf-datasets/mnist/t10k-labels-idx1-ubyte.gz",
-]
-
-mnist_dir = Path("mnist")
-mnist_dir.mkdir(exist_ok=True)
-
-for url in mnist_urls:
-    gz_path = mnist_dir / url.split("/")[-1]
-    out_path = gz_path.with_suffix("")
-
-    print(f"Downloading {gz_path.name}")
-    download(url, gz_path)
-
-    print(f"Extracting {gz_path.name}")
-    extract_gz(gz_path, out_path)
-    gz_path.unlink()
-
-print("MNIST downloaded\n")
-
 # ---------------------------------------------------------------------------
 # EMNIST  (one big zip containing gzipped idx files for every split)
 # ---------------------------------------------------------------------------
@@ -56,10 +24,9 @@ print("MNIST downloaded\n")
 # split. We download it once and extract each requested split into emnist/.
 EMNIST_URL = "https://biometrics.nist.gov/cs_links/EMNIST/gzip.zip"
 
-# Splits to extract. Class counts (set num_classes in shared.hpp to match):
-#   "digits"   -> 10   "mnist" -> 10
-#   "letters"  -> 26
-#   "balanced" -> 47   "bymerge" -> 47
+# Splits to extract, matching what Shared::dataset() in shared.hpp accepts:
+#   "digits"   -> 10 classes
+#   "letters"  -> 27
 #   "byclass"  -> 62
 EMNIST_SPLITS = ["digits", "letters", "byclass"]
 
@@ -73,18 +40,27 @@ kinds = (
     "test-labels-idx1-ubyte",
 )
 
-with tempfile.TemporaryDirectory() as tmp:
-    zip_path = Path(tmp) / "emnist.zip"
+# only fetch what's missing so a re-run doesn't redownload 500 MB for nothing
+missing = [
+    f"emnist-{split}-{kind}"
+    for split in EMNIST_SPLITS
+    for kind in kinds
+    if not (emnist_dir / f"emnist-{split}-{kind}").exists()
+]
 
-    print(f"Downloading EMNIST zip (~500 MB, one-time) for splits: {', '.join(EMNIST_SPLITS)}")
-    download(EMNIST_URL, zip_path)
+if not missing:
+    print("EMNIST already present, nothing to do")
+else:
+    with tempfile.TemporaryDirectory() as tmp:
+        zip_path = Path(tmp) / "emnist.zip"
 
-    print("Extracting EMNIST splits")
-    with zipfile.ZipFile(zip_path) as zf:
-        names = zf.namelist()
-        for split in EMNIST_SPLITS:
-            for kind in kinds:
-                fname = f"emnist-{split}-{kind}"
+        print(f"Downloading EMNIST zip (~500 MB, one-time) for splits: {', '.join(EMNIST_SPLITS)}")
+        download(EMNIST_URL, zip_path)
+
+        print("Extracting EMNIST splits")
+        with zipfile.ZipFile(zip_path) as zf:
+            names = zf.namelist()
+            for fname in missing:
                 # files live somewhere like "gzip/<fname>.gz" inside the archive
                 member = next((n for n in names if n.endswith(fname + ".gz")), None)
                 if member is None:
@@ -93,7 +69,6 @@ with tempfile.TemporaryDirectory() as tmp:
                 out_path = emnist_dir / fname
                 with gzip.open(io.BytesIO(zf.read(member)), "rb") as f_in, open(out_path, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
-            print(f"  {split} extracted")
+                print(f"  {fname}")
 
-print("EMNIST downloaded\n")
-print("Datasets downloaded")
+    print("EMNIST downloaded")
