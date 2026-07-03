@@ -46,47 +46,32 @@ __global__ void normalize_transpose_kernel(const uint8_t *in, float *out, int nu
     out[idx] = in[sample * image_size + pixel] / 255.0f;
 }
 
-__global__ void add_kernel(float *a, const float *b, int n){
+__global__ void bias_relu_kernel(float *a, const float *bias, int cols, int n){
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx < n) a[idx] += b[idx];
+    if(idx < n) a[idx] = fmaxf(0.0f, a[idx] + bias[idx / cols]);
 }
 
-__global__ void bias_add_kernel(float *a, const float *bias, int cols, int n){
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx < n) a[idx] += bias[idx / cols];
-}
-
-__global__ void hadamard_kernel(const float *a, const float *b, float *out, int n){
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx < n) out[idx] = a[idx] * b[idx];
-}
-
-__global__ void relu_kernel(const float *in, float *out, int n){
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx < n) out[idx] = fmaxf(0.0f, in[idx]);
-}
-
-__global__ void relu_derivative_kernel(const float *in, float *out, int n){
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx < n) out[idx] = (in[idx] > 0.0f) ? 1.0f : 0.0f;
-}
-
-__global__ void softmax_kernel(const float *in, float *out, int rows, int cols){
+__global__ void softmax_bias_kernel(const float *in, const float *bias, float *out, int rows, int cols){
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     if(col >= cols) return;
 
-    float max_val = in[col];
+    float max_val = in[col] + bias[0];
     for(int u = 0; u < rows; u++)
-        max_val = fmaxf(max_val, in[u * cols + col]);
+        max_val = fmaxf(max_val, in[u * cols + col] + bias[u]);
 
     float sum = 0.0f;
     for(int u = 0; u < rows; u++){
-        float exponent = expf(in[u * cols + col] - max_val);
+        float exponent = expf(in[u * cols + col] + bias[u] - max_val);
         out[u * cols + col] = exponent;
         sum += exponent;
     }
     for(int u = 0; u < rows; u++)
         out[u * cols + col] /= sum;
+}
+
+__global__ void relu_backward_kernel(float *grad, const float *activation, int n){
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n && activation[idx] <= 0.0f) grad[idx] = 0.0f;
 }
 
 __global__ void subtract_scaled_kernel(float *bias, const float *mat, int rows, int batch_size, float scale){
@@ -99,15 +84,7 @@ __global__ void subtract_scaled_kernel(float *bias, const float *mat, int rows, 
     bias[row] -= scale * curr_sum;
 }
 
-__global__ void subtract_one_hot_kernel(float *data, const uint8_t *labels, int start, int cols){
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-    if(col >= cols) return;
-
-    int label = labels[start + col];
-    data[label * cols + col] -= 1.0f;
-}
-
-__global__ void metrics_kernel(const float *predictions, const uint8_t *labels, int start,
+__global__ void metrics_kernel(float *predictions, const uint8_t *labels, int start,
                                int rows, int cols, float *loss, int *correct){
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     if(col >= cols) return;
@@ -127,6 +104,9 @@ __global__ void metrics_kernel(const float *predictions, const uint8_t *labels, 
 
     float p = fmaxf(predictions[actual * cols + col], Losses::EPSILON);
     atomicAdd(loss, -logf(p));
+
+    // subtract the one hot while we're here, saves backprop a launch
+    predictions[actual * cols + col] -= 1.0f;
 }
 
 DeviceDataset::DeviceDataset(const Dataset& dataset) :
@@ -239,41 +219,27 @@ void Matrix::transpose_multiply_into(const Matrix& other, Matrix& out) const{
         out.data, out.ld));
 }
 
-void Matrix::hadamard_into(const Matrix& other, Matrix& out) const{
-    if(cols != other.cols || rows != other.rows)
-        throw std::runtime_error("hadamard_into: Invalid matrix dimensions (1)");
-    if(out.rows != rows || out.cols != cols)
-        throw std::runtime_error("hadamard_into: Invalid matrix dimensions (2)");
+void Matrix::bias_relu(const Matrix& bias){
+    if(bias.rows != rows || bias.cols != 1)
+        throw std::runtime_error("bias_relu: Invalid matrix dimensions");
 
     int n = rows * cols;
-    hadamard_kernel<<<blocks_for(n), BLOCK>>>(data, other.data, out.data, n);
+    bias_relu_kernel<<<blocks_for(n), BLOCK>>>(data, bias.data, cols, n);
 }
 
-void Matrix::relu_into(Matrix& out) const{
-    int n = rows * cols;
-    relu_kernel<<<blocks_for(n), BLOCK>>>(data, out.data, n);
+void Matrix::softmax_bias_into(const Matrix& bias, Matrix& out) const{
+    if(bias.rows != rows || bias.cols != 1)
+        throw std::runtime_error("softmax_bias_into: Invalid matrix dimensions");
+
+    softmax_bias_kernel<<<blocks_for(cols), BLOCK>>>(data, bias.data, out.data, rows, cols);
 }
 
-void Matrix::relu_derivative_into(Matrix& out) const{
-    int n = rows * cols;
-    relu_derivative_kernel<<<blocks_for(n), BLOCK>>>(data, out.data, n);
-}
-
-void Matrix::softmax_into(Matrix& out) const{
-    softmax_kernel<<<blocks_for(cols), BLOCK>>>(data, out.data, rows, cols);
-}
-
-void Matrix::add(const Matrix& other){
-    if(rows != other.rows)
-        throw std::runtime_error("add: Invalid dimensions for matrix addition (1)");
+void Matrix::relu_backward(const Matrix& activation){
+    if(activation.rows != rows || activation.cols != cols)
+        throw std::runtime_error("relu_backward: Invalid matrix dimensions");
 
     int n = rows * cols;
-    if(cols == other.cols) // normal matrix addition
-        add_kernel<<<blocks_for(n), BLOCK>>>(data, other.data, n);
-    else if(other.cols == 1) // broadcast addition over all columns
-        bias_add_kernel<<<blocks_for(n), BLOCK>>>(data, other.data, cols, n);
-    else
-        throw std::runtime_error("add: Invalid dimensions for matrix addition (2)");
+    relu_backward_kernel<<<blocks_for(n), BLOCK>>>(data, activation.data, n);
 }
 
 void Matrix::subtract_scaled(const Matrix& mat, float scale){
@@ -295,10 +261,6 @@ void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float 
         data, ld));
 }
 
-void Matrix::subtract_one_hot(const DeviceDataset& dataset, int start){
-    subtract_one_hot_kernel<<<blocks_for(cols), BLOCK>>>(data, dataset.labels, start, cols);
-}
-
-void Matrix::accumulate_metrics(const DeviceDataset& dataset, int start, Metrics& metrics) const{
+void Matrix::accumulate_metrics(const DeviceDataset& dataset, int start, Metrics& metrics){
     metrics_kernel<<<blocks_for(cols), BLOCK>>>(data, dataset.labels, start, rows, cols, metrics.loss, metrics.correct);
 }

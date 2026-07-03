@@ -48,16 +48,13 @@ struct Matrix{
 
     void multiply_into(const Matrix&, Matrix&) const;
     void transpose_multiply_into(const Matrix&, Matrix&) const;
-    void hadamard_into(const Matrix&, Matrix&) const;
 
-    void relu_into(Matrix&) const;
-    void relu_derivative_into(Matrix&) const;
-    void softmax_into(Matrix&) const;
+    void bias_relu(const Matrix&);
+    void softmax_bias_into(const Matrix&, Matrix&) const;
+    void relu_backward(const Matrix&);
 
-    void add(const Matrix&);
     void subtract_scaled(const Matrix&, float);
     void subtract_outer_product(const Matrix&, const Matrix&, float);
-    void subtract_one_hot(const DeviceDataset&, int);
 
-    void accumulate_metrics(const DeviceDataset&, int, Metrics&) const;
+    void accumulate_metrics(const DeviceDataset&, int, Metrics&);
 };

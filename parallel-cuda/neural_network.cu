@@ -3,8 +3,6 @@
 
 #include "data_loader.hpp"
 #include "matrix.hpp"
-#include "activations.hpp"
-#include "losses.hpp"
 #include "../shared.hpp"
 
 void train(const DeviceDataset&, Matrix&, Matrix&, Matrix&, Matrix&, int, float, int);
@@ -61,12 +59,10 @@ void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Mat
     int num_labels = W2.rows;
     const float gradient_scale = learning_rate / static_cast<float>(batch_size);
 
-    Matrix Z1(hidden_size, batch_size);
     Matrix A1(hidden_size, batch_size);
     Matrix Z2(num_labels, batch_size);
     Matrix predictions(num_labels, batch_size);
     Matrix dA1(hidden_size, batch_size);
-    Matrix dZ1(hidden_size, batch_size);
 
     Metrics metrics;
 
@@ -81,28 +77,23 @@ void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Mat
             Matrix X = Matrix::batch_view(dataset, start, batch_size);
 
             /*      Forward     */
-            W1.multiply_into(X, Z1);
-            Z1.add(b1);
-            Activations::relu_into(Z1, A1);
+            W1.multiply_into(X, A1);
+            A1.bias_relu(b1);
 
             W2.multiply_into(A1, Z2);
-            Z2.add(b2);
-            Activations::softmax_into(Z2, predictions);
+            Z2.softmax_bias_into(b2, predictions);
 
             /* intermediate metrics */
             predictions.accumulate_metrics(dataset, start, metrics);
 
             /*      Backpropagation     */
-            predictions.subtract_one_hot(dataset, start);
-
             W2.transpose_multiply_into(predictions, dA1);
-            Activations::relu_derivative_into(Z1, dZ1);
-            dA1.hadamard_into(dZ1, dZ1);
+            dA1.relu_backward(A1);
 
             W2.subtract_outer_product(predictions, A1, gradient_scale);
-            W1.subtract_outer_product(dZ1, X, gradient_scale);
+            W1.subtract_outer_product(dA1, X, gradient_scale);
             b2.subtract_scaled(predictions, gradient_scale);
-            b1.subtract_scaled(dZ1, gradient_scale);
+            b1.subtract_scaled(dA1, gradient_scale);
 
         }
         float tot_loss = 0.0f;
@@ -120,7 +111,6 @@ void evaluate(const DeviceDataset& dataset, const Matrix& W1, const Matrix& b1, 
     int hidden_size = W1.rows;
     int num_labels = W2.rows;
 
-    Matrix Z1(hidden_size, batch_size);
     Matrix A1(hidden_size, batch_size);
     Matrix Z2(num_labels, batch_size);
     Matrix predictions(num_labels, batch_size);
@@ -134,13 +124,11 @@ void evaluate(const DeviceDataset& dataset, const Matrix& W1, const Matrix& b1, 
         int start = batch * batch_size;
         Matrix X = Matrix::batch_view(dataset, start, batch_size);
 
-        W1.multiply_into(X, Z1);
-        Z1.add(b1);
-        Activations::relu_into(Z1, A1);
+        W1.multiply_into(X, A1);
+        A1.bias_relu(b1);
 
         W2.multiply_into(A1, Z2);
-        Z2.add(b2);
-        Activations::softmax_into(Z2, predictions);
+        Z2.softmax_bias_into(b2, predictions);
 
         predictions.accumulate_metrics(dataset, start, metrics);
     }
