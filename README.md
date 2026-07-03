@@ -24,13 +24,10 @@ Binaries land in the repo root.
 ## Running
 
 ```sh
-# unoptimized baseline has no batching:
 ./unoptimized-serial-nn <digits|letters|byclass> <epochs> <lr> <hidden>
 
-# all others:
 ./<binary> <digits|letters|byclass> <epochs> <lr> <hidden> <train_batch> <eval_batch>
 
-# example:
 ./parallel-cuda-nn byclass 5 0.05 512 128 100
 ```
 
