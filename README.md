@@ -41,13 +41,15 @@ Sweeps every dataset × hidden size × batch size × model, runs each config `-n
 
 ## Implementations
 
+Each folder has its own README with the code-level details.
+
 | variant | approach | strengths | weaknesses |
 |---|---|---|---|
-| `serial-unoptimized` | per-sample SGD, naive loops | simplest to read, the baseline | no batching, extremely slow |
-| `serial-optimized` | mini-batches, cache-friendly loop order, `__restrict` | big single-core speedup, no dependencies | still one core |
-| `parallel-omp` | optimized-serial + OpenMP across the hot loops | scales with cores, tiny code delta | high CPU burn for its speedup; memory-bandwidth bound |
-| `parallel-cblas` | GEMMs handed to OpenBLAS | near-peak CPU throughput, best non-GPU option | only the matmuls are parallel; thread overhead hurts small batches |
-| `parallel-cuda` | everything GPU-resident: cuBLAS TF32 GEMMs, fused kernels, dataset stored transposed on device (a batch is a pointer offset), whole epoch captured in a CUDA graph and replayed | fastest by a wide margin; one host sync per epoch | needs an NVIDIA GPU; ~1 s fixed startup (context + data load) dominates tiny runs; TF32 rounds the 4th decimal |
+| [`serial-unoptimized`](serial-unoptimized/README.md) | per-sample SGD, naive loops | simplest to read, the baseline | no batching, extremely slow |
+| [`serial-optimized`](serial-optimized/README.md) | mini-batches, cache-friendly loop order, `__restrict` | big single-core speedup, no dependencies | still one core |
+| [`parallel-omp`](parallel-omp/README.md) | optimized-serial + OpenMP across the hot loops | scales with cores, tiny code delta | high CPU burn for its speedup; memory-bandwidth bound |
+| [`parallel-cblas`](parallel-cblas/README.md) | GEMMs handed to OpenBLAS | near-peak CPU throughput, best non-GPU option | only the matmuls are parallel; thread overhead hurts small batches |
+| [`parallel-cuda`](parallel-cuda/README.md) | everything GPU-resident: cuBLAS TF32 GEMMs, fused kernels, dataset stored transposed on device (a batch is a pointer offset), whole epoch captured in a CUDA graph and replayed | fastest by a wide margin; one host sync per epoch | needs an NVIDIA GPU; ~1 s fixed startup (context + data load) dominates tiny runs; TF32 rounds the 4th decimal |
 
 Reference times (byclass 697k images, 3 epochs, hidden 512, batch 128 — RTX 4070 laptop / Zen 4):
 
