@@ -31,6 +31,7 @@ static cublasHandle_t cublas_handle(){
     static cublasHandle_t handle = []{
         cublasHandle_t h;
         CUBLAS_CHECK(cublasCreate(&h));
+        CUBLAS_CHECK(cublasSetMathMode(h, CUBLAS_TF32_TENSOR_OP_MATH));
         return h;
     }();
     return handle;
