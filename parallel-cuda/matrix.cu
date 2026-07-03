@@ -10,13 +10,6 @@
 #include "data_loader.hpp"
 #include "losses.hpp"
 
-#define CUDA_CHECK(call)                                                                            \
-    do{                                                                                             \
-        cudaError_t err_ = (call);                                                                  \
-        if(err_ != cudaSuccess)                                                                     \
-            throw std::runtime_error(std::string("cuda: ") + cudaGetErrorString(err_));             \
-    }while(0)
-
 #define CUBLAS_CHECK(call)                                                                          \
     do{                                                                                             \
         if((call) != CUBLAS_STATUS_SUCCESS)                                                         \
@@ -27,11 +20,21 @@ static constexpr int BLOCK = 256;
 
 static inline int blocks_for(int n){ return (n + BLOCK - 1) / BLOCK; }
 
+cudaStream_t gpu_stream(){
+    static cudaStream_t stream = []{
+        cudaStream_t s;
+        CUDA_CHECK(cudaStreamCreate(&s));
+        return s;
+    }();
+    return stream;
+}
+
 static cublasHandle_t cublas_handle(){
     static cublasHandle_t handle = []{
         cublasHandle_t h;
         CUBLAS_CHECK(cublasCreate(&h));
         CUBLAS_CHECK(cublasSetMathMode(h, CUBLAS_TF32_TENSOR_OP_MATH));
+        CUBLAS_CHECK(cublasSetStream(h, gpu_stream()));
         return h;
     }();
     return handle;
@@ -120,12 +123,12 @@ DeviceDataset::DeviceDataset(const Dataset& dataset) :
 
     int total = num_samples * image_size;
     CUDA_CHECK(cudaMalloc(&images, sizeof(float) * dataset.images.size()));
-    normalize_transpose_kernel<<<blocks_for(total), BLOCK>>>(staging, images, num_samples, image_size);
+    normalize_transpose_kernel<<<blocks_for(total), BLOCK, 0, gpu_stream()>>>(staging, images, num_samples, image_size);
 
     CUDA_CHECK(cudaMalloc(&labels, dataset.labels.size()));
     CUDA_CHECK(cudaMemcpy(labels, dataset.labels.data(), dataset.labels.size(), cudaMemcpyHostToDevice));
 
-    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaStreamSynchronize(gpu_stream()));
     CUDA_CHECK(cudaFree(staging));
 }
 
@@ -146,13 +149,14 @@ Metrics::~Metrics(){
 }
 
 void Metrics::reset(){
-    CUDA_CHECK(cudaMemset(loss, 0, sizeof(float)));
-    CUDA_CHECK(cudaMemset(correct, 0, sizeof(int)));
+    CUDA_CHECK(cudaMemsetAsync(loss, 0, sizeof(float), gpu_stream()));
+    CUDA_CHECK(cudaMemsetAsync(correct, 0, sizeof(int), gpu_stream()));
 }
 
 void Metrics::read(float& loss_out, int& correct_out) const{
-    CUDA_CHECK(cudaMemcpy(&loss_out, loss, sizeof(float), cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(&correct_out, correct, sizeof(int), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpyAsync(&loss_out, loss, sizeof(float), cudaMemcpyDeviceToHost, gpu_stream()));
+    CUDA_CHECK(cudaMemcpyAsync(&correct_out, correct, sizeof(int), cudaMemcpyDeviceToHost, gpu_stream()));
+    CUDA_CHECK(cudaStreamSynchronize(gpu_stream()));
 }
 
 Matrix::Matrix(int rows_, int cols_) : rows(rows_), cols(cols_), ld(cols_){
@@ -225,14 +229,14 @@ void Matrix::bias_relu(const Matrix& bias){
         throw std::runtime_error("bias_relu: Invalid matrix dimensions");
 
     int n = rows * cols;
-    bias_relu_kernel<<<blocks_for(n), BLOCK>>>(data, bias.data, cols, n);
+    bias_relu_kernel<<<blocks_for(n), BLOCK, 0, gpu_stream()>>>(data, bias.data, cols, n);
 }
 
 void Matrix::softmax_bias_into(const Matrix& bias, Matrix& out) const{
     if(bias.rows != rows || bias.cols != 1)
         throw std::runtime_error("softmax_bias_into: Invalid matrix dimensions");
 
-    softmax_bias_kernel<<<blocks_for(cols), BLOCK>>>(data, bias.data, out.data, rows, cols);
+    softmax_bias_kernel<<<blocks_for(cols), BLOCK, 0, gpu_stream()>>>(data, bias.data, out.data, rows, cols);
 }
 
 void Matrix::relu_backward(const Matrix& activation){
@@ -240,11 +244,11 @@ void Matrix::relu_backward(const Matrix& activation){
         throw std::runtime_error("relu_backward: Invalid matrix dimensions");
 
     int n = rows * cols;
-    relu_backward_kernel<<<blocks_for(n), BLOCK>>>(data, activation.data, n);
+    relu_backward_kernel<<<blocks_for(n), BLOCK, 0, gpu_stream()>>>(data, activation.data, n);
 }
 
 void Matrix::subtract_scaled(const Matrix& mat, float scale){
-    subtract_scaled_kernel<<<blocks_for(rows), BLOCK>>>(data, mat.data, rows, mat.cols, scale);
+    subtract_scaled_kernel<<<blocks_for(rows), BLOCK, 0, gpu_stream()>>>(data, mat.data, rows, mat.cols, scale);
 }
 
 void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float scale){
@@ -263,5 +267,5 @@ void Matrix::subtract_outer_product(const Matrix& col, const Matrix& row, float 
 }
 
 void Matrix::accumulate_metrics(const DeviceDataset& dataset, int start, Metrics& metrics){
-    metrics_kernel<<<blocks_for(cols), BLOCK>>>(data, dataset.labels, start, rows, cols, metrics.loss, metrics.correct);
+    metrics_kernel<<<blocks_for(cols), BLOCK, 0, gpu_stream()>>>(data, dataset.labels, start, rows, cols, metrics.loss, metrics.correct);
 }

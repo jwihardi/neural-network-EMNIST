@@ -3,8 +3,22 @@
 #include <vector>
 #include <random>
 #include <cstdint>
+#include <string>
+#include <stdexcept>
+
+#include <cuda_runtime.h>
 
 struct Dataset;
+
+#define CUDA_CHECK(call)                                                                            \
+    do{                                                                                             \
+        cudaError_t err_ = (call);                                                                  \
+        if(err_ != cudaSuccess)                                                                     \
+            throw std::runtime_error(std::string("cuda: ") + cudaGetErrorString(err_));             \
+    }while(0)
+
+// single stream all work goes on, so an epoch can be captured into a graph
+cudaStream_t gpu_stream();
 
 struct DeviceDataset{
     float *images = nullptr;

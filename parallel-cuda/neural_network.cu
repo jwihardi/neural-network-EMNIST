@@ -69,9 +69,7 @@ void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Mat
     /* dropping the last batch if it's smaller, makes most sense with the current architecture */
     const int num_batches = dataset.num_samples / batch_size; // want int division
 
-    for(int epoch = 0; epoch < epochs; epoch++){
-        metrics.reset();
-
+    auto run_epoch = [&](){
         for(int batch = 0; batch < num_batches; batch++){
             int start = batch * batch_size;
             Matrix X = Matrix::batch_view(dataset, start, batch_size);
@@ -94,8 +92,30 @@ void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Mat
             W1.subtract_outer_product(dA1, X, gradient_scale);
             b2.subtract_scaled(predictions, gradient_scale);
             b1.subtract_scaled(dA1, gradient_scale);
-
         }
+    };
+
+    cudaGraphExec_t epoch_graph = nullptr;
+
+    for(int epoch = 0; epoch < epochs; epoch++){
+        metrics.reset();
+
+        if(epoch == 0){
+            /* first epoch runs eagerly, warms cublas up so the capture below is clean */
+            run_epoch();
+        }else{
+            if(!epoch_graph){
+                /* record the whole epoch once, every launch after this is a single replay */
+                cudaGraph_t graph;
+                CUDA_CHECK(cudaStreamBeginCapture(gpu_stream(), cudaStreamCaptureModeGlobal));
+                run_epoch();
+                CUDA_CHECK(cudaStreamEndCapture(gpu_stream(), &graph));
+                CUDA_CHECK(cudaGraphInstantiate(&epoch_graph, graph, 0));
+                CUDA_CHECK(cudaGraphDestroy(graph));
+            }
+            CUDA_CHECK(cudaGraphLaunch(epoch_graph, gpu_stream()));
+        }
+
         float tot_loss = 0.0f;
         int correct = 0;
         metrics.read(tot_loss, correct);
@@ -105,6 +125,8 @@ void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Mat
         float accuracy = static_cast<float>(correct) / processed;
         std::cout << "Epoch: " << epoch + 1 << " | loss: " << avg_loss << " | accuracy: " << accuracy << "\n";
     }
+
+    if(epoch_graph) CUDA_CHECK(cudaGraphExecDestroy(epoch_graph));
 }
 
 void evaluate(const DeviceDataset& dataset, const Matrix& W1, const Matrix& b1, const Matrix& W2, const Matrix& b2, int batch_size){
