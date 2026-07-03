@@ -57,12 +57,18 @@ int main(int argc, char *argv[]){
 void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Matrix& b2, int epochs, float learning_rate, int batch_size){
     int hidden_size = W1.rows;
     int num_labels = W2.rows;
+    constexpr float MOMENTUM = 0.9f;
     const float gradient_scale = learning_rate / static_cast<float>(batch_size);
 
     Matrix A1(hidden_size, batch_size);
     Matrix Z2(num_labels, batch_size);
     Matrix predictions(num_labels, batch_size);
     Matrix dA1(hidden_size, batch_size);
+
+    Matrix vW1(hidden_size, W1.cols);
+    Matrix vW2(num_labels, hidden_size);
+    Matrix vb1(hidden_size, 1);
+    Matrix vb2(num_labels, 1);
 
     Metrics metrics;
 
@@ -88,10 +94,12 @@ void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Mat
             W2.transpose_multiply_into(predictions, dA1);
             dA1.relu_backward(A1);
 
-            W2.subtract_outer_product(predictions, A1, gradient_scale);
-            W1.subtract_outer_product(dA1, X, gradient_scale);
-            b2.subtract_scaled(predictions, gradient_scale);
-            b1.subtract_scaled(dA1, gradient_scale);
+            vW2.accumulate_outer_product(predictions, A1, MOMENTUM);
+            vW1.accumulate_outer_product(dA1, X, MOMENTUM);
+            W2.subtract_velocity(vW2, gradient_scale);
+            W1.subtract_velocity(vW1, gradient_scale);
+            b2.subtract_scaled(predictions, vb2, MOMENTUM, gradient_scale);
+            b1.subtract_scaled(dA1, vb1, MOMENTUM, gradient_scale);
         }
     };
 
