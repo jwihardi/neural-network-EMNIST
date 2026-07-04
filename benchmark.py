@@ -7,7 +7,8 @@ sizes, repeats every test -n times and reports the average wall time
 (plus min/max/std) in comparison tables at the end.
 
 The unoptimized serial version has no batching, so it runs once per
-(dataset, hidden) and shows up with batch '-'.
+(dataset, hidden) and shows up with batch '-'. Same for nn-optimized,
+which has no epochs or lr either (it takes <hidden> <lambda>).
 
 Examples:
     ./benchmark.py -n 3
@@ -33,6 +34,7 @@ MODELS = {
     "parallel-omp-nn": True,
     "parallel-cblas-nn": True,
     "parallel-cuda-nn": True,
+    "nn-optimized-nn": False,
 }
 
 ACC_RE = re.compile(r"test accuracy: ([0-9.]+)")
@@ -57,6 +59,8 @@ def parse_args():
     p.add_argument("--hidden", nargs="+", type=int, default=[128, 512])
     p.add_argument("--batches", nargs="+", type=int, default=[32, 128, 512])
     p.add_argument("--eval-batch", type=int, default=100)
+    p.add_argument("--ridge", type=float, default=1e-5,
+                   help="lambda for nn-optimized (default 1e-5)")
     p.add_argument("--timeout", type=float, default=900,
                    help="per-run timeout in seconds, timed out runs show as DNF (default 900)")
     p.add_argument("--skip", nargs="+", default=[], choices=list(MODELS),
@@ -137,9 +141,12 @@ def sweep(args):
     results = {}
     done = 0
     for ds, h, bs, m in tests:
-        cmd = [str(ROOT / m), ds, str(args.epochs), str(args.lr), str(h)]
-        if bs is not None:
-            cmd += [str(bs), str(args.eval_batch)]
+        if m == "nn-optimized-nn":
+            cmd = [str(ROOT / m), ds, str(h), str(args.ridge)]
+        else:
+            cmd = [str(ROOT / m), ds, str(args.epochs), str(args.lr), str(h)]
+            if bs is not None:
+                cmd += [str(bs), str(args.eval_batch)]
 
         label = f"{ds:8s} hidden={h:<4d} bs={'-' if bs is None else bs:<4} {m}"
         print(f"  {label:70s}", end="", flush=True)
