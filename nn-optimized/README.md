@@ -11,7 +11,7 @@ An extreme learning machine / random-features model:
 - **W1 and b1 stay at random init.** A random projection followed by ReLU is already a decent feature map — width does the work that backprop would.
 - **The output layer is just ridge regression.** With the hidden activations `H` fixed, minimizing squared error over W2 is linear least squares, and the minimizer is exact: `(H Hᵀ + λI) W2ᵀ = H Yᵀ`.
 
-So the whole "training" is: accumulate `H Hᵀ` (hidden × hidden) and `H Yᵀ` (hidden × classes) over the dataset in 16k-sample chunks, add `λ` to the diagonal, Cholesky solve. The dataset streams through three fat GEMMs and never needs a second look.
+So the whole "training" is: accumulate `H Hᵀ` (hidden × hidden) and `H Yᵀ` (hidden × classes) over the dataset in 16k-sample chunks, add `λ` to the diagonal, Cholesky solve. The chunks stream straight off disk through pinned double buffers — the read of one chunk overlaps the GPU math of the previous, and the full set never sits in GPU memory.
 
 ## Numbers
 
@@ -19,15 +19,15 @@ hidden 4096, λ = 1e-5 (total wall time including load):
 
 | dataset | time | test accuracy |
 |---|---|---|
-| digits | 1.5 s | 97.6% |
+| digits | 1.3 s | 97.6% |
 | letters | 0.9 s | 84.8% |
-| byclass | 3.4 s | 76.7% |
+| byclass | 2.8 s | 76.7% |
 
-Width is the only knob: byclass at hidden 8192 reaches 79.5% in 8.3 s, at 512 it manages 63%.
+Width is the only knob: byclass at hidden 8192 reaches 79.5% in 7.9 s, at 512 it manages 63%.
 
-## Why no TF32
+## TF32 only where it's safe
 
-The [cuda version](../parallel-cuda/README.md) runs its GEMMs in TF32 and loses a 4th decimal. Here that would be fatal: the normal equations square the condition number of `H`, so the ~1e-3 relative noise of TF32 lands directly on the small eigenvalues the solve depends on — with it enabled, accuracy drops to chance. The Gram accumulation runs in plain fp32 (`Ssyrk`, one triangle only, which is also why the tensor cores wouldn't have helped anyway).
+The feature GEMMs run in TF32 like the [cuda version](../parallel-cuda/README.md)'s — noise on the random features is just a slightly different random feature map. The Gram accumulation is forced back to fp32: the normal equations square the condition number of `H`, so the same ~1e-3 relative noise inside `H Hᵀ` lands on the small eigenvalues the solve depends on, and accuracy drops to chance.
 
 ## The catch
 

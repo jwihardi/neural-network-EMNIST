@@ -61,4 +61,4 @@ Reference times (byclass 697k images, 3 epochs, hidden 512, batch 128 — RTX 40
 |---|---|---|
 | 3.3 s (85.0%) | 12.6 s | 55.7 s |
 
-With momentum + OneCycle the cuda version reaches 83.4% in a single epoch (1.6 s). `nn-optimized` solves byclass at hidden 4096 in 3.4 s (76.7%) with no epochs.
+With momentum + OneCycle the cuda version reaches 83.4% in a single epoch (1.6 s). `nn-optimized` solves byclass at hidden 4096 in 2.8 s (76.7%) with no epochs.
