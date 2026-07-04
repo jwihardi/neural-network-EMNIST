@@ -40,6 +40,7 @@ static cublasHandle_t cublas_handle(){
     static cublasHandle_t handle = []{
         cublasHandle_t h;
         CUBLAS_CHECK(cublasCreate(&h));
+        CUBLAS_CHECK(cublasSetMathMode(h, CUBLAS_TF32_TENSOR_OP_MATH));
         CUBLAS_CHECK(cublasSetStream(h, gpu_stream()));
         return h;
     }();
@@ -239,12 +240,12 @@ void Matrix::one_hot(const DeviceDataset& dataset, int start){
     one_hot_kernel<<<blocks_for(n), BLOCK, 0, gpu_stream()>>>(data, dataset.labels, start, cols, ld, n);
 }
 
-/* A += H Hᵀ, one triangle only, potrf below reads the same one.
-   no tf32 here on purpose, the normal equations square the condition number and tf32 noise wrecks the solve */
+/* A += H Hᵀ, one triangle only, potrf below reads the same one */
 void Matrix::gram_accumulate(const Matrix& h){
     if(h.rows != rows || rows != cols)
         throw std::runtime_error("gram_accumulate: Invalid matrix dimensions");
 
+    CUBLAS_CHECK(cublasSetMathMode(cublas_handle(), CUBLAS_DEFAULT_MATH));
     const float alpha = 1.0f, beta = 1.0f;
     CUBLAS_CHECK(cublasSsyrk(cublas_handle(), CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T,
         rows, h.cols,
@@ -252,6 +253,7 @@ void Matrix::gram_accumulate(const Matrix& h){
         h.data, h.ld,
         &beta,
         data, ld));
+    CUBLAS_CHECK(cublasSetMathMode(cublas_handle(), CUBLAS_TF32_TENSOR_OP_MATH));
 }
 
 /* B += H Yᵀ, accumulated column major so cusolver can take it directly */
