@@ -78,7 +78,7 @@ __global__ void relu_backward_kernel(float *grad, const float *activation, int n
     if(idx < n && activation[idx] <= 0.0f) grad[idx] = 0.0f;
 }
 
-__global__ void subtract_scaled_kernel(float *bias, const float *mat, float *velocity, int rows, int batch_size, float momentum, float scale){
+__global__ void subtract_scaled_kernel(float *bias, const float *mat, float *velocity, int rows, int batch_size, float momentum, const float *scale){
     int row = blockIdx.x * blockDim.x + threadIdx.x;
     if(row >= rows) return;
 
@@ -88,12 +88,25 @@ __global__ void subtract_scaled_kernel(float *bias, const float *mat, float *vel
 
     float v = momentum * velocity[row] + curr_sum;
     velocity[row] = v;
-    bias[row] -= scale * v;
+    bias[row] -= *scale * v;
 }
 
-__global__ void subtract_velocity_kernel(float *w, const float *velocity, float scale, int n){
+__global__ void subtract_velocity_kernel(float *w, const float *velocity, const float *scale, int n){
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx < n) w[idx] -= scale * velocity[idx];
+    if(idx < n) w[idx] -= *scale * velocity[idx];
+}
+
+__global__ void onecycle_kernel(float *scale, int *step, int total_steps, float max_lr, float inv_batch){
+    float pos = static_cast<float>(*step) / static_cast<float>(total_steps);
+    (*step)++;
+
+    constexpr float WARMUP = 0.3f;
+    float lr;
+    if(pos < WARMUP)
+        lr = max_lr * (0.1f + 0.9f * pos / WARMUP);
+    else
+        lr = max_lr * 0.5f * (1.0f + cosf((pos - WARMUP) / (1.0f - WARMUP) * 3.14159265f));
+    *scale = lr * inv_batch;
 }
 
 __global__ void metrics_kernel(float *predictions, const uint8_t *labels, int start,
@@ -255,7 +268,7 @@ void Matrix::relu_backward(const Matrix& activation){
     relu_backward_kernel<<<blocks_for(n), BLOCK, 0, gpu_stream()>>>(data, activation.data, n);
 }
 
-void Matrix::subtract_scaled(const Matrix& mat, Matrix& velocity, float momentum, float scale){
+void Matrix::subtract_scaled(const Matrix& mat, Matrix& velocity, float momentum, const float *scale){
     subtract_scaled_kernel<<<blocks_for(rows), BLOCK, 0, gpu_stream()>>>(data, mat.data, velocity.data, rows, mat.cols, momentum, scale);
 }
 
@@ -274,9 +287,25 @@ void Matrix::accumulate_outer_product(const Matrix& col, const Matrix& row, floa
         data, ld));
 }
 
-void Matrix::subtract_velocity(const Matrix& velocity, float scale){
+void Matrix::subtract_velocity(const Matrix& velocity, const float *scale){
     int n = rows * cols;
     subtract_velocity_kernel<<<blocks_for(n), BLOCK, 0, gpu_stream()>>>(data, velocity.data, scale, n);
+}
+
+OneCycle::OneCycle(int total_steps_, float max_lr_, int batch_size) :
+    total_steps(total_steps_), max_lr(max_lr_), inv_batch(1.0f / static_cast<float>(batch_size)){
+    CUDA_CHECK(cudaMalloc(&scale, sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&step, sizeof(int)));
+    CUDA_CHECK(cudaMemset(step, 0, sizeof(int)));
+}
+
+OneCycle::~OneCycle(){
+    if(scale) cudaFree(scale);
+    if(step) cudaFree(step);
+}
+
+void OneCycle::tick(){
+    onecycle_kernel<<<1, 1, 0, gpu_stream()>>>(scale, step, total_steps, max_lr, inv_batch);
 }
 
 void Matrix::accumulate_metrics(const DeviceDataset& dataset, int start, Metrics& metrics){

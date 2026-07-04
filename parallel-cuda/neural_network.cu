@@ -58,7 +58,6 @@ void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Mat
     int hidden_size = W1.rows;
     int num_labels = W2.rows;
     constexpr float MOMENTUM = 0.9f;
-    const float gradient_scale = learning_rate / static_cast<float>(batch_size);
 
     Matrix A1(hidden_size, batch_size);
     Matrix Z2(num_labels, batch_size);
@@ -75,10 +74,14 @@ void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Mat
     /* dropping the last batch if it's smaller, makes most sense with the current architecture */
     const int num_batches = dataset.num_samples / batch_size; // want int division
 
+    OneCycle schedule(epochs * num_batches, learning_rate, batch_size);
+
     auto run_epoch = [&](){
         for(int batch = 0; batch < num_batches; batch++){
             int start = batch * batch_size;
             Matrix X = Matrix::batch_view(dataset, start, batch_size);
+
+            schedule.tick();
 
             /*      Forward     */
             W1.multiply_into(X, A1);
@@ -96,10 +99,10 @@ void train(const DeviceDataset& dataset, Matrix& W1, Matrix& b1, Matrix& W2, Mat
 
             vW2.accumulate_outer_product(predictions, A1, MOMENTUM);
             vW1.accumulate_outer_product(dA1, X, MOMENTUM);
-            W2.subtract_velocity(vW2, gradient_scale);
-            W1.subtract_velocity(vW1, gradient_scale);
-            b2.subtract_scaled(predictions, vb2, MOMENTUM, gradient_scale);
-            b1.subtract_scaled(dA1, vb1, MOMENTUM, gradient_scale);
+            W2.subtract_velocity(vW2, schedule.scale);
+            W1.subtract_velocity(vW1, schedule.scale);
+            b2.subtract_scaled(predictions, vb2, MOMENTUM, schedule.scale);
+            b1.subtract_scaled(dA1, vb1, MOMENTUM, schedule.scale);
         }
     };
 

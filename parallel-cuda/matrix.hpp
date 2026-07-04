@@ -44,6 +44,21 @@ struct Metrics{
     void read(float&, int&) const;
 };
 
+// schedule state lives on the device so graph replays see fresh values
+struct OneCycle{
+    float *scale = nullptr; // current lr / batch size, the update kernels read this
+    int *step = nullptr;
+    int total_steps;
+    float max_lr, inv_batch;
+
+    OneCycle(int, float, int);
+    ~OneCycle();
+    OneCycle(const OneCycle&) = delete;
+    OneCycle& operator=(const OneCycle&) = delete;
+
+    void tick();
+};
+
 struct Matrix{
     float *data = nullptr; // device pointer
     int rows, cols;
@@ -67,9 +82,9 @@ struct Matrix{
     void softmax_bias_into(const Matrix&, Matrix&) const;
     void relu_backward(const Matrix&);
 
-    void subtract_scaled(const Matrix&, Matrix&, float, float);
+    void subtract_scaled(const Matrix&, Matrix&, float, const float*);
     void accumulate_outer_product(const Matrix&, const Matrix&, float);
-    void subtract_velocity(const Matrix&, float);
+    void subtract_velocity(const Matrix&, const float*);
 
     void accumulate_metrics(const DeviceDataset&, int, Metrics&);
 };
