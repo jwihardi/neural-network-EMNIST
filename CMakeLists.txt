@@ -97,6 +97,15 @@ if(CMAKE_CUDA_COMPILER)
     target_compile_options(parallel-cuda-nn PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:-O3;--use_fast_math;-Xcompiler=-O3,-march=native>)
     target_link_libraries(parallel-cuda-nn PRIVATE CUDA::cublas CUDA::cudart)
+
+    add_executable(nn-optimized-nn
+        nn-optimized/neural_network.cu
+        nn-optimized/matrix.cu
+    )
+    target_compile_features(nn-optimized-nn PRIVATE cxx_std_20 cuda_std_20)
+    target_compile_options(nn-optimized-nn PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-O3;--use_fast_math;-Xcompiler=-O3,-march=native>)
+    target_link_libraries(nn-optimized-nn PRIVATE CUDA::cublas CUDA::cusolver CUDA::cudart)
 else()
     message(WARNING "CUDA toolkit not found; skipping parallel-cuda-nn target. "
                     "Install the CUDA toolkit (nvcc) and re-run cmake.")
