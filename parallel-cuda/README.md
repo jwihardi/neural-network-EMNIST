@@ -12,9 +12,15 @@ Raw hardware is the obvious part — ~10× the memory bandwidth and TF32 tensor 
 - **Fused kernels close the serial gaps.** bias+ReLU in-place, bias+softmax, ReLU-backward as an in-place mask, one-hot subtract folded into the metrics kernel. What cblas runs as serial CPU passes between sgemms is here a couple of microsecond-scale kernels — 11 launches per batch instead of 16.
 - **CUDA graphs delete launch overhead.** At these sizes each op takes ~µs but costs ~5–10 µs to launch — the GPU idles between launches. Epoch 1 runs eagerly (warming up cuBLAS), then the whole epoch (~5,400 batches on byclass) is stream-captured once and every later epoch is a single `cudaGraphLaunch`.
 
+## Momentum + OneCycle
+
+The updates use heavy-ball momentum (0.9) under a OneCycle schedule: linear warmup over the first 30% of *all* steps, cosine decay after, so the schedule stretches to whatever epoch budget you give it. The lr and step counter live in device memory and a one-thread kernel advances them each batch — kernel arguments are frozen into a captured graph but device memory isn't, so replays keep stepping the schedule.
+
+The velocity buffers cost ~0.15 s/epoch in extra memory traffic and buy back whole epochs: convergence that took 3+ epochs of plain SGD now lands inside one.
+
 ## Performance
 
-2.7 s on the byclass reference config: ~1 s fixed (CUDA context + reading 547 MB off disk) + ~0.37 s per epoch. ~4.4× over cblas, ~20× over OMP. Per-epoch cost is now bound by GEMM memory traffic — the practical ceiling for this network without changing precision or batch size (batch 1024 is ~30% faster per epoch, essentially free).
+3.3 s on the byclass reference config: ~1 s fixed (CUDA context + reading 547 MB off disk) + ~0.55 s per epoch. Time-to-accuracy is the better metric now — one epoch (1.6 s) reaches 83.4% test, past what plain SGD reached in three; the 3-epoch run lands at 85.0%. Per-epoch cost is bound by GEMM memory traffic — the practical ceiling for this network without changing precision or batch size.
 
 ## What limits it
 
@@ -24,4 +30,4 @@ Raw hardware is the obvious part — ~10× the memory bandwidth and TF32 tensor 
 
 ## The chain, summarized
 
-[unoptimized](../serial-unoptimized/README.md) re-reads weights per sample → [optimized](../serial-optimized/README.md) amortizes them over a batch → [omp](../parallel-omp/README.md) adds cores to those loops → [cblas](../parallel-cblas/README.md) makes each op near-optimal → this version keeps the data in one place and deletes the overhead between ops.
+[unoptimized](../serial-unoptimized/README.md) re-reads weights per sample → [optimized](../serial-optimized/README.md) amortizes them over a batch → [omp](../parallel-omp/README.md) adds cores to those loops → [cblas](../parallel-cblas/README.md) makes each op near-optimal → this version keeps the data in one place and deletes the overhead between ops. [nn-optimized](../nn-optimized/README.md) steps off the ladder entirely and stops iterating.
