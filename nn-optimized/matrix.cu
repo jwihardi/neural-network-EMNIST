@@ -160,6 +160,40 @@ void Metrics::read(float& loss_out, int& correct_out) const{
     CUDA_CHECK(cudaStreamSynchronize(gpu_stream()));
 }
 
+StagedChunk::StagedChunk(int image_size_, int max_samples_) :
+    image_size(image_size_), max_samples(max_samples_){
+    const std::size_t bytes = static_cast<std::size_t>(image_size) * static_cast<std::size_t>(max_samples);
+    CUDA_CHECK(cudaHostAlloc(&host, bytes, cudaHostAllocDefault));
+    CUDA_CHECK(cudaMalloc(&raw, bytes));
+    CUDA_CHECK(cudaMalloc(&pixels, sizeof(float) * bytes));
+    CUDA_CHECK(cudaEventCreate(&done));
+}
+
+StagedChunk::~StagedChunk(){
+    if(host) cudaFreeHost(host);
+    if(raw) cudaFree(raw);
+    if(pixels) cudaFree(pixels);
+    cudaEventDestroy(done);
+}
+
+void StagedChunk::wait(){
+    CUDA_CHECK(cudaEventSynchronize(done));
+}
+
+Matrix StagedChunk::upload(int samples){
+    const std::size_t bytes = static_cast<std::size_t>(image_size) * static_cast<std::size_t>(samples);
+    CUDA_CHECK(cudaMemcpyAsync(raw, host, bytes, cudaMemcpyHostToDevice, gpu_stream()));
+
+    int total = samples * image_size;
+    normalize_transpose_kernel<<<blocks_for(total), BLOCK, 0, gpu_stream()>>>(raw, pixels, samples, image_size);
+
+    return Matrix(pixels, image_size, samples, samples);
+}
+
+void StagedChunk::record(){
+    CUDA_CHECK(cudaEventRecord(done, gpu_stream()));
+}
+
 Matrix::Matrix(int rows_, int cols_) : rows(rows_), cols(cols_), ld(cols_){
     std::size_t bytes = sizeof(float) * static_cast<std::size_t>(rows_) * static_cast<std::size_t>(cols_);
     CUDA_CHECK(cudaMalloc(&data, bytes));
@@ -235,9 +269,9 @@ void Matrix::bias_relu(const Matrix& bias){
     bias_relu_kernel<<<blocks_for(n), BLOCK, 0, gpu_stream()>>>(data, bias.data, cols, ld, n);
 }
 
-void Matrix::one_hot(const DeviceDataset& dataset, int start){
+void Matrix::one_hot(const uint8_t *labels, int start){
     int n = rows * cols;
-    one_hot_kernel<<<blocks_for(n), BLOCK, 0, gpu_stream()>>>(data, dataset.labels, start, cols, ld, n);
+    one_hot_kernel<<<blocks_for(n), BLOCK, 0, gpu_stream()>>>(data, labels, start, cols, ld, n);
 }
 
 /* A += H Hᵀ, one triangle only, potrf below reads the same one */

@@ -38,9 +38,54 @@ inline uint32_t read_u32_line(std::ifstream& file){
     return (uint32_t(bytes[0]) << 24) | (uint32_t(bytes[1]) << 16) | (uint32_t(bytes[2]) << 8) | uint32_t(bytes[3]);
 }
 
+struct ImageStream{
+    std::ifstream file;
+    unsigned int num_samples, height, width;
+
+    explicit ImageStream(const std::string& image_file_path){
+        file.open(image_file_path, std::ios::binary);
+        if(!file)
+            throw std::runtime_error("ImageStream: Failed to open image file: " + image_file_path);
+
+        if(read_u32_line(file) != IMAGE_MAGIC)
+            throw std::runtime_error("ImageStream: Invalid MNIST/EMNIST image file");
+
+        num_samples = read_u32_line(file);
+        height = read_u32_line(file);
+        width = read_u32_line(file);
+    }
+
+    void read_slab(uint8_t *dst, int samples){
+        const std::size_t bytes = static_cast<std::size_t>(samples) * height * width;
+        file.read(reinterpret_cast<char *>(dst), static_cast<std::streamsize>(bytes));
+        if(static_cast<std::size_t>(file.gcount()) != bytes)
+            throw std::runtime_error("ImageStream: Failed to read image data (short read)");
+    }
+};
+
+inline std::vector<uint8_t> load_label_file(const std::string& label_file_path, unsigned int expected){
+    std::ifstream file(label_file_path, std::ios::binary);
+    if(!file)
+        throw std::runtime_error("load_label_file: Failed to open label file: " + label_file_path);
+
+    if(read_u32_line(file) != LABEL_MAGIC)
+        throw std::runtime_error("load_label_file: Invalid MNIST/EMNIST label file");
+
+    uint32_t num_labels = read_u32_line(file);
+    if(num_labels != expected)
+        throw std::runtime_error("load_label_file: Number of labels don't match number of images");
+
+    std::vector<uint8_t> labels(num_labels);
+    file.read(reinterpret_cast<char *>(labels.data()), static_cast<std::streamsize>(num_labels));
+    if(static_cast<std::size_t>(file.gcount()) != num_labels)
+        throw std::runtime_error("load_label_file: Failed to read label data (short read)");
+
+    return labels;
+}
+
 inline Dataset load_images(const std::string& image_file_path, int num_classes){
     std::ifstream file(image_file_path, std::ios::binary);
-    if(!file) 
+    if(!file)
         throw std::runtime_error("load_images: Failed to open image file: " + image_file_path);
 
     uint32_t magic = read_u32_line(file);

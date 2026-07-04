@@ -44,6 +44,25 @@ struct Metrics{
     void read(float&, int&) const;
 };
 
+struct Matrix;
+
+struct StagedChunk{
+    uint8_t *host = nullptr; // pinned
+    uint8_t *raw = nullptr;
+    float *pixels = nullptr;
+    int image_size, max_samples;
+    cudaEvent_t done;
+
+    StagedChunk(int, int);
+    ~StagedChunk();
+    StagedChunk(const StagedChunk&) = delete;
+    StagedChunk& operator=(const StagedChunk&) = delete;
+
+    void wait();
+    Matrix upload(int);
+    void record();
+};
+
 struct Matrix{
     float *data = nullptr; // device pointer
     int rows, cols;
@@ -65,7 +84,7 @@ struct Matrix{
     void multiply_into(const Matrix&, Matrix&) const;
     void bias_relu(const Matrix&);
 
-    void one_hot(const DeviceDataset&, int);
+    void one_hot(const uint8_t*, int);
     void gram_accumulate(const Matrix&);
     void target_accumulate(const Matrix&, const Matrix&);
     void add_diagonal(float);
