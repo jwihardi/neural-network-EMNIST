@@ -18,7 +18,7 @@ It inherits serial-optimized's weakness instead of fixing it:
 - **The per-core code is still naive.** No register blocking, no cache tiling — each thread streams its rows at the same per-core efficiency as the serial build. 16 threads means 16 streams competing for the same memory bus, and DRAM bandwidth saturates long before the cores do.
 - **Barriers between dependent ops** (GEMM → bias → activation → GEMM…) sync the whole team many times per batch.
 
-Net: ~4–5× over serial on the byclass reference config (55.7 s), while burning ~14 minutes of aggregate CPU time — poor work-efficiency for the wall time it buys.
+Net: ~4–5× over serial on byclass (55.7 s at 3 epochs, hidden 512, batch 128), while burning ~14 minutes of aggregate CPU time — poor work-efficiency for the wall time it buys.
 
 ## Next rung
 

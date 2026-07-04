@@ -64,3 +64,7 @@ Benchmark results (5 epochs, lr 0.05, hidden 512, batch 128, avg of 3 runs — R
 | byclass | DNF | 812.5 s (82.8%) | 83.1 s (82.8%) | 16.5 s (82.8%) | 3.5 s (85.4%) | 0.6 s (63.0%) |
 
 Geomean speedup over optimized-serial across the full 84-config sweep: omp 8.5×, cblas 27×, cuda 73×, nn-optimized 262×. Serial, omp and cblas produce identical accuracy (same math); cuda runs 1–2 points higher from momentum + OneCycle. nn-optimized trails on accuracy at these hidden sizes — width is its only knob (byclass reaches 76.7% at hidden 4096 in 2.8 s). DNF = didn't finish inside the 900 s cap this sweep ran with.
+
+## Credits
+
+The READMEs, `import_datasets.py`, and `benchmark.py` were written with [Claude](https://claude.com/claude-code).

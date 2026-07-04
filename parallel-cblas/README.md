@@ -12,7 +12,7 @@ Same thread count, radically better per-op code. OpenBLAS GEMM kernels do everyt
 - **Register-blocked microkernels** — hand-tuned AVX-512 inner kernels keep ~all FMA units busy; the naive loops reach a fraction of that.
 - **The `alpha`/`beta` fold** — the weight update runs as `W = -lr/B · dZ·Xᵀ + 1.0 · W` in a single sgemm, deleting the separate scale-and-subtract pass over the weights entirely.
 
-So where OMP saturated the memory bus with inefficient streams, this actually converts bandwidth into FLOPs: 12.6 s on the byclass reference config, ~4.4× over OMP with far less CPU burn.
+So where OMP saturated the memory bus with inefficient streams, this actually converts bandwidth into FLOPs: 12.6 s on byclass (3 epochs, hidden 512, batch 128), ~4.4× over OMP with far less CPU burn.
 
 ## What still limits it
 

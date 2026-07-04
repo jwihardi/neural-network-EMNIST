@@ -20,7 +20,7 @@ The velocity buffers cost ~0.15 s/epoch in extra memory traffic and buy back who
 
 ## Performance
 
-3.3 s on the byclass reference config: ~1 s fixed (CUDA context + reading 547 MB off disk) + ~0.55 s per epoch. Time-to-accuracy is the better metric now — one epoch (1.6 s) reaches 83.4% test, past what plain SGD reached in three; the 3-epoch run lands at 85.0%. Per-epoch cost is bound by GEMM memory traffic — the practical ceiling for this network without changing precision or batch size.
+3.3 s on byclass (3 epochs, hidden 512, batch 128): ~1 s fixed (CUDA context + reading 547 MB off disk) + ~0.55 s per epoch. Time-to-accuracy is the better metric now — one epoch (1.6 s) reaches 83.4% test, past what plain SGD reached in three; the 3-epoch run lands at 85.0%. Per-epoch cost is bound by GEMM memory traffic — the practical ceiling for this network without changing precision or batch size.
 
 ## What limits it
 
