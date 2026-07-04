@@ -61,8 +61,6 @@ def parse_args():
     p.add_argument("--eval-batch", type=int, default=100)
     p.add_argument("--ridge", type=float, default=1e-5,
                    help="lambda for nn-optimized (default 1e-5)")
-    p.add_argument("--timeout", type=float, default=900,
-                   help="per-run timeout in seconds, timed out runs show as DNF (default 900)")
     p.add_argument("--skip", nargs="+", default=[], choices=list(MODELS),
                    help="models to leave out")
     p.add_argument("--skip-build", action="store_true")
@@ -79,14 +77,10 @@ def build():
     print(f"{GREEN}ok{RESET}")
 
 
-def run_once(cmd, timeout):
-    """-> (seconds, accuracy, loss) or None on failure/timeout"""
+def run_once(cmd):
+    """-> (seconds, accuracy, loss) or None on failure"""
     start = time.perf_counter()
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True,
-                           timeout=timeout, cwd=ROOT)
-    except subprocess.TimeoutExpired:
-        return None
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
     elapsed = time.perf_counter() - start
     if r.returncode != 0:
         return None
@@ -153,11 +147,11 @@ def sweep(args):
 
         times, accs = [], []
         for _ in range(args.runs):
-            out = run_once(cmd, args.timeout)
+            out = run_once(cmd)
             done += 1
             if out is None:
                 print(f"{RED}x{RESET}", end="", flush=True)
-                break  # timed out / crashed once, no point repeating it
+                break  # crashed once, no point repeating it
             times.append(out[0])
             accs.append(out[1])
             print(f"{DIM}.{RESET}", end="", flush=True)
